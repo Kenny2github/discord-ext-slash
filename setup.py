@@ -14,13 +14,17 @@ with open(os.path.join(os.path.dirname(__file__),
                        'README.rst'), 'w') as f2:
     f2.write(longdesc)
 
+with open(os.path.join(os.path.dirname(__file__),
+                       'requirements.txt'), 'r') as f3:
+    requirements = f3.read().strip().splitlines()
+
 setup(
-    name="discord-ext-status",
+    name="discord-ext-slash",
     version=version,
     description="Support slash commands with discord.py.",
     long_description=longdesc,
     url="https://github.com/Kenny2github/discord-ext-slash",
-    author="Ken Hilton",
+    author="kenny2discord",
     author_email="kenny2minecraft@gmail.com",
     license="MIT",
     classifiers=[
@@ -33,6 +37,6 @@ setup(
     ],
     keywords='discord slash commands',
     packages=["discord.ext.slash"],
-    install_requires=['pypresence==3.3.2'],
+    install_requires=requirements,
     python_requires='>=3.7',
 )
