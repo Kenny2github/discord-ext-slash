@@ -60,7 +60,7 @@ import asyncio
 import discord
 from discord.ext import commands
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
@@ -499,8 +499,7 @@ class Group:
     def add_slash(self, func, **kwargs):
         """See :class:`Command` doc"""
         kwargs['parent'] = self
-        cmd = Command(func, **kwargs)
-        self.slash[cmd.name] = cmd
+        self.slash_cmd(**kwargs)(func)
 
     def slash_group(self, **kwargs):
         """See :class:`Group` doc"""
@@ -514,8 +513,7 @@ class Group:
     def add_slash_group(self, func, **kwargs):
         """See :class:`Group` doc"""
         kwargs['parent'] = self
-        group = Group(func, **kwargs)
-        self.slash[group.name] = group
+        self.slash_group(**kwargs)(func)
 
     def to_dict(self):
         data = {
@@ -580,7 +578,7 @@ class SlashBot(commands.Bot):
 
     def add_slash(self, func, **kwargs):
         """See :class:`Command` doc"""
-        self.slash.add(Command(func, **kwargs))
+        self.slash_cmd(**kwargs)(func)
 
     def slash_group(self, **kwargs):
         """See :class:`Group` doc"""
@@ -592,8 +590,7 @@ class SlashBot(commands.Bot):
 
     def add_slash_group(self, func, **kwargs):
         """See :class:`Group` doc"""
-        group = Group(func, **kwargs)
-        self.slash.add(group)
+        self.slash_group(**kwargs)(func)
 
     def add_slash_cog(self, cog):
         """Add all attributes of ``cog`` that are

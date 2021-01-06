@@ -47,6 +47,6 @@ Notes
   information is still available.
 * All descriptions are **required**.
 
-Not Yet Supported
-=================
-* Subcommands
+See the wiki_.
+
+.. _wiki: https://github.com/Kenny2github/discord-ext-slash/wiki
