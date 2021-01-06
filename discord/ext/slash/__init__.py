@@ -47,9 +47,9 @@ Notes
   information is still available.
 * All descriptions are **required**.
 
-Not Yet Supported
-=================
-* Subcommands
+See the wiki_.
+
+.. _wiki: https://github.com/Kenny2github/discord-ext-slash/wiki
 '''
 from __future__ import annotations
 from enum import IntEnum
@@ -60,7 +60,7 @@ import asyncio
 import discord
 from discord.ext import commands
 
-__version__ = '0.0.0'
+__version__ = '0.1.0'
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
