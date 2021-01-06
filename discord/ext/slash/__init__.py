@@ -60,7 +60,7 @@ import asyncio
 import discord
 from discord.ext import commands
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
@@ -155,21 +155,21 @@ class Context(discord.Object, _AsyncInit):
     async def __init__(self, client: SlashBot, cmd: Command, event: dict):
         self.client = client
         self.command = cmd
-        self.id = event['id']
+        self.id = int(event['id'])
         try:
-            self.guild = await self.client.fetch_guild(event['guild_id'])
+            self.guild = await self.client.fetch_guild(int(event['guild_id']))
         except discord.HTTPException:
             self.guild = discord.Object(event['guild_id'])
             logger.debug('Fetching guild %s for interaction %s failed',
                          self.guild.id, self.id, exc_info=True)
         try:
-            self.channel = await self.client.fetch_channel(event['channel_id'])
+            self.channel = await self.client.fetch_channel(int(event['channel_id']))
         except discord.HTTPException:
             self.channel = discord.Object(event['channel_id'])
             logger.debug('Fetching channel %s for interaction %s failed',
                          self.channel.id, self.id, exc_info=True)
         try:
-            self.author = await self.guild.fetch_member(event['member']['user']['id'])
+            self.author = await self.guild.fetch_member(int(event['member']['user']['id']))
         except (discord.HTTPException, AttributeError):
             self.author = discord.Member(
                 data=event['member'], guild=self.guild, state=self.client._connection)
@@ -195,11 +195,25 @@ class Context(discord.Object, _AsyncInit):
                 value = opt['value']
                 opttype = self.command.options[opt['name']].type
                 if opttype == ApplicationCommandOptionType.USER:
-                    value = await self.guild.fetch_member(int(value))
+                    try:
+                        value = await self.guild.fetch_member(int(value))
+                    except (discord.HTTPException, AttributeError):
+                        logger.debug('Fetching member %s for interaction %s failed',
+                                     value, self.id, exc_info=True)
+                        value = discord.Object(value)
                 elif opttype == ApplicationCommandOptionType.CHANNEL:
-                    value = await self.guild.fetch_channel(int(value))
+                    try:
+                        value = await self.client.fetch_channel(int(value))
+                    except discord.HTTPException:
+                        logger.debug('Fetching channel %s for interaction %s failed',
+                                     value, self.id, exc_info=True)
+                        value = discord.Object(value)
                 elif opttype == ApplicationCommandOptionType.ROLE:
                     value = self.guild.get_role(int(value))
+                    if value is None:
+                        logger.debug('Getting role %s for interaction %s failed',
+                                     value, self.id, exc_info=True)
+                        value = discord.Object(value)
                 kwargs[opt['name']] = value
             elif 'options' in opt:
                 self.command = self.command.slash[opt['name']]
@@ -343,10 +357,10 @@ class Choice:
     -----------
     name: :class:`str`
         The description of the choice, displayed to users.
-    value: Union[:class:`str`, :class:`int`]
+    value: :class:`str`
         The actual value fed into the application.
     """
-    def __init__(self, name: str, value: Union[str, int]):
+    def __init__(self, name: str, value: str):
         self.name = name
         self.value = value
 
@@ -364,7 +378,7 @@ class Choice:
 class Command:
     """Represents a slash command.
 
-    Attributes
+    Parameters
     -----------
     id: Optional[:class:`int`]
         ID of registered command. Can be None when not yet registered,
@@ -389,7 +403,7 @@ class Command:
         self.id = None
         self.name = kwargs.pop('name', coro.__name__)
         self.description = kwargs.pop('description', coro.__doc__)
-        self.guild_id = kwargs.pop('guild', None)
+        self.guild_id = int(kwargs.pop('guild', None))
         self.parent = kwargs.pop('parent', None)
         self._ctx_arg = None
         self.options = {}
@@ -612,7 +626,7 @@ class SlashBot(commands.Bot):
                 ', please open an issue for this: '
                 'https://github.com/Kenny2github/discord-ext-slash/issues/new')
         for maybe_cmd in self.slash:
-            if maybe_cmd.id == event['data']['id']:
+            if maybe_cmd.id == int(event['data']['id']):
                 cmd = maybe_cmd
                 break
         else:
@@ -687,18 +701,18 @@ class SlashBot(commands.Bot):
             cmd_dict['application_id'] = done[name]['application_id']
             if done[name] == cmd_dict:
                 logger.debug('GET\t%s\tin guild\t%s', name, guild_id)
-                todo[name].id = done[name]['id']
+                todo[name].id = int(done[name]['id'])
             else:
                 state['PATCH'].setdefault(guild_id, {})[name] \
-                    = {'json': todo[name].to_dict(), 'id': done[name]['id'],
+                    = {'json': todo[name].to_dict(), 'id': int(done[name]['id']),
                        'cmd': todo[name]}
         for name in to_delete:
             state['DELETE'].setdefault(guild_id, {})[name] \
-                = {'id': done[name]['id']}
+                = {'id': int(done[name]['id'])}
 
     async def process_command(self, name, guild_id, route, kwargs):
         cmd = kwargs.pop('cmd', None)
         data = await self.http.request(route, **kwargs)
         if cmd is not None:
-            cmd.id = data['id']
+            cmd.id = int(data['id'])
         logger.debug('%s\t%s\tin guild\t%s', route.method, name, guild_id)
