@@ -54,6 +54,7 @@ Not Yet Supported
 from __future__ import annotations
 from enum import IntEnum
 from typing import Coroutine, Union
+import logging
 import datetime
 import asyncio
 import discord
@@ -109,7 +110,16 @@ class InteractionResponseType(IntEnum):
 class _Route(discord.http.Route):
     BASE = 'https://discord.com/api/v8'
 
-class Context(discord.Object):
+class _AsyncInit:
+    async def __new__(cls, *args, **kwargs):
+        inst = super().__new__(cls)
+        await inst.__init__(*args, **kwargs)
+        return inst
+
+    async def __init__(self):
+        pass
+
+class Context(discord.Object, _AsyncInit):
     """Object representing an interaction.
 
     Attributes
@@ -128,6 +138,9 @@ class Context(discord.Object):
         will break and should not be relied on.
     command: :class:`Command`
         The command that was run.
+    options: Mapping[:class:`str`, Any]
+        The options passed to the command (including this context).
+        More useful in groups and checks.
     me: Optional[:class:`discord.Member`]
         The bot, as a ``Member`` in that context.
         Can be None if the client is not in the guild.
@@ -137,31 +150,63 @@ class Context(discord.Object):
         Webhook used for sending followup messages.
         None until interaction response has been sent
     """
-    def __init__(self, client: SlashBot):
-        self.client = client
+    cog = None # not a thing, but some things check for it
 
-    async def _ainit(self, event: dict):
+    async def __init__(self, client: SlashBot, cmd: Command, event: dict):
+        self.client = client
+        self.command = cmd
         self.id = event['id']
         try:
             self.guild = await self.client.fetch_guild(event['guild_id'])
         except discord.HTTPException:
             self.guild = discord.Object(event['guild_id'])
+            logger.debug('Fetching guild %s for interaction %s failed',
+                         self.guild.id, self.id, exc_info=True)
         try:
             self.channel = await self.client.fetch_channel(event['channel_id'])
         except discord.HTTPException:
             self.channel = discord.Object(event['channel_id'])
+            logger.debug('Fetching channel %s for interaction %s failed',
+                         self.channel.id, self.id, exc_info=True)
         try:
             self.author = await self.guild.fetch_member(event['member']['user']['id'])
-        except discord.HTTPException:
+        except (discord.HTTPException, AttributeError):
             self.author = discord.Member(
                 data=event['member'], guild=self.guild, state=self.client._connection)
+            logger.debug('Fetching member for interaction %s failed',
+                         self.id, exc_info=True)
         self.token = event['token']
-        self.command = event['data']['name']
+        # construct options into function-friendly form
+        await self._kwargs_from_options(event['data'].get('options', []))
         try:
             self.me = await self.guild.fetch_member(self.client.user.id)
         except (discord.HTTPException, AttributeError):
             self.me = None
+            logger.debug('Fetching member %s (me) in guild %s '
+                         'for interaction %s failed',
+                         self.client.user.id, self.guild.id,
+                         self.id, exc_info=True)
         self.webhook = None
+
+    async def _kwargs_from_options(self, options):
+        kwargs = {}
+        for opt in options:
+            if 'value' in opt:
+                value = opt['value']
+                opttype = self.command.options[opt['name']].type
+                if opttype == ApplicationCommandOptionType.USER:
+                    value = await self.guild.fetch_member(int(value))
+                elif opttype == ApplicationCommandOptionType.CHANNEL:
+                    value = await self.guild.fetch_channel(int(value))
+                elif opttype == ApplicationCommandOptionType.ROLE:
+                    value = self.guild.get_role(int(value))
+                kwargs[opt['name']] = value
+            elif 'options' in opt:
+                self.command = self.command.slash[opt['name']]
+                await self._kwargs_from_options(opt['options'])
+                return
+        kwargs[self.command._ctx_arg] = self
+        self.options = kwargs
 
     async def respond(self, content='', *, embeds=None, allowed_mentions=None,
                       rtype=InteractionResponseType.ChannelMessageWithSource):
@@ -183,6 +228,8 @@ class Context(discord.Object):
         mentions = self.client.allowed_mentions
         if mentions is not None and allowed_mentions is not None:
             mentions = mentions.merge(allowed_mentions)
+        elif allowed_mentions is not None:
+            mentions = allowed_mentions
         if self.webhook is not None:
             data = {}
             if content:
@@ -197,7 +244,7 @@ class Context(discord.Object):
                            guild_id=self.guild.id)
         else:
             data = {
-                'type': rtype
+                'type': int(rtype)
             }
             if content or embeds:
                 data['data'] = {'content': content}
@@ -253,8 +300,11 @@ class Option:
     required: Optional[:class:`bool`]
         If ``True``, this option must be specified for a valid command
         invocation. Defaults to ``False``.
-    choices: Optional[Iterable[:class:`Choice`]]
+    choices: Optional[Iterable[Union[
+            :class:`str`, Mapping[str, str], :class:`Choice`]]]
         If specified, only these values are allowed for this option.
+        Strings are converted into Choices with the same name and value
+        Dicts are passed as kwargs to the Choice constructor.
     """
     name = None
 
@@ -266,6 +316,8 @@ class Option:
         self.default = kwargs.pop('default', False)
         self.required = kwargs.pop('required', False)
         self.choices = kwargs.pop('choices', None)
+        if self.choices is not None:
+            self.choices = [Choice.from_data(c) for c in self.choices]
 
     def to_dict(self):
         data = {
@@ -278,8 +330,11 @@ class Option:
         if self.required:
             data['required'] = self.required
         if self.choices is not None:
-            data['choices'] = [choice.to_dict for choice in self.choices]
+            data['choices'] = [choice.to_dict() for choice in self.choices]
         return data
+
+    def clone(self):
+        return type(self)(**self.to_dict())
 
 class Choice:
     """Represents one choice for an option value.
@@ -295,6 +350,14 @@ class Choice:
         self.name = name
         self.value = value
 
+    @classmethod
+    def from_data(cls, data):
+        if isinstance(data, cls):
+            return data
+        if isinstance(data, str):
+            return cls(name=data, value=data)
+        return cls(**data)
+
     def to_dict(self):
         return {'name': self.name, 'value': self.value}
 
@@ -304,35 +367,53 @@ class Command:
     Attributes
     -----------
     id: Optional[:class:`int`]
-        ID of registered command. Can be None when not yet registered.
+        ID of registered command. Can be None when not yet registered,
+        or if not a top-level command.
     name: :class:`str`
-        Command name. Defaults to method name
+        Command name. Defaults to coro name.
     description: :class:`str`
-        Description shown in command list. Defaults to method doc.
+        Description shown in command list. Defaults to coro doc.
     guild_id: Optional[:class:`int`]
         If present, this command only exists in this guild.
+    parent: Optional[:class:`Group`]
+        Parent (sub)command group.
     options: Mapping[:class:`str`, :class:`Option`]
         Options for this command.
-    method: Coroutine
-        Original callback for the command
+    coro: Coroutine
+        Original callback for the command.
+    check: Coroutine
+        Callback that prevents command execution
+        if it returns False (not falsy, False).
     """
-    def __init__(self, method: Coroutine, name=None, **kwargs):
+    def __init__(self, coro: Coroutine, **kwargs):
         self.id = None
-        self.name = name or method.__name__
-        self.description = kwargs.pop('description', method.__doc__)
+        self.name = kwargs.pop('name', coro.__name__)
+        self.description = kwargs.pop('description', coro.__doc__)
         self.guild_id = kwargs.pop('guild', None)
+        self.parent = kwargs.pop('parent', None)
         self._ctx_arg = None
         self.options = {}
-        for arg, typ in method.__annotations__.items():
+        for arg, typ in coro.__annotations__.items():
             if typ is Context:
                 self._ctx_arg = arg
             if isinstance(typ, Option):
+                typ = typ.clone()
                 self.options[arg] = typ
                 if typ.name is None:
                     typ.name = arg
         if self._ctx_arg is None:
             raise ValueError('One argument must be type-hinted SlashContext')
-        self.method = method
+        self.coro = coro
+        async def check(ctx):
+            pass
+        self._check = kwargs.pop('check', check)
+
+    @property
+    def qualname(self):
+        """Fully qualified name of command, including group names."""
+        if self.parent is None:
+            return self.name
+        return self.parent.qualname + ' ' + self.name
 
     def __hash__(self):
         return hash((self.name, self.guild_id))
@@ -346,25 +427,128 @@ class Command:
             data['options'] = [opt.to_dict() for opt in self.options.values()]
         return data
 
-    async def invoke(self, ctx, options):
-        kwargs = {self._ctx_arg: ctx}
-        for opt in options:
-            value = opt.get('value', None)
-            opttype = self.options[opt['name']].type
-            if opttype == ApplicationCommandOptionType.USER:
-                value = await ctx.guild.fetch_member(int(value))
-            elif opttype == ApplicationCommandOptionType.CHANNEL:
-                value = await ctx.guild.fetch_channel(int(value))
-            elif opttype == ApplicationCommandOptionType.ROLE:
-                value = ctx.guild.get_role(int(value))
-            kwargs[opt['name']] = value
-        await self.method(**kwargs)
+    async def invoke(self, ctx):
+        parents = [] # highest level parent last
+        parent = self.parent
+        while parent is not None:
+            parents.append(parent.coro)
+            parent = parent.parent
+        parents.extend(ctx.client._checks)
+        parents.append(self._check)
+        parents.reverse()
+        for check in parents:
+            if await check(ctx) is False:
+                return
+        logger.debug('User %s running, in guild %s channel %s, command: %s',
+                     ctx.author.id, ctx.guild.id, ctx.channel.id,
+                     ctx.command.qualname)
+        await self.coro(**ctx.options)
+
+    def check(self, coro):
+        """Set this command's check to this coroutine.
+        Can be used as a decorator.
+        """
+        self._check = coro
+
+class Group:
+    """Represents a group of slash commands.
+
+    Attributes
+    -----------
+    id: Optional[:class:`int`]
+        ID of registered group. Can be None when not yet registered,
+        or if not a top-level group.
+    name: :class:`str`
+        (Sub)command group name. Defaults to coro name.
+    description: :class:`str`
+        Description shown in command list. Defaults to coro doc.
+    guild_id: Optional[:class:`int`]
+        If present, this group only exists in this guild.
+    parent: Optional[:class:`Group`]
+        Parent command group.
+    coro: Coroutine
+        Callback invoked **BEFORE** child callback is invoked.
+        If this returns False (not falsy, False),
+    slash: Mapping[:class:`str`, Union[:class:`Group`, :class:`Command`]]
+    """
+    def __init__(self, coro: Coroutine, **kwargs):
+        self.id = None
+        self.name = kwargs.pop('name', coro.__name__)
+        self.description = kwargs.pop('description', coro.__doc__)
+        self.guild_id = kwargs.pop('guild_id', None)
+        self.parent = kwargs.pop('parent', None)
+        self.coro = coro
+        self.slash = {}
+
+    @property
+    def qualname(self):
+        """Fully qualified name of command, including group names."""
+        if self.parent is None:
+            return self.name
+        return self.parent.qualname + ' ' + self.name
+
+    def slash_cmd(self, **kwargs):
+        """See :class:`Command` doc"""
+        kwargs['parent'] = self
+        def decorator(func):
+            cmd = Command(func, **kwargs)
+            self.slash[cmd.name] = cmd
+            return cmd
+        return decorator
+
+    def add_slash(self, func, **kwargs):
+        """See :class:`Command` doc"""
+        kwargs['parent'] = self
+        cmd = Command(func, **kwargs)
+        self.slash[cmd.name] = cmd
+
+    def slash_group(self, **kwargs):
+        """See :class:`Group` doc"""
+        kwargs['parent'] = self
+        def decorator(func):
+            group = Group(func, **kwargs)
+            self.slash[group.name] = group
+            return group
+        return decorator
+
+    def add_slash_group(self, func, **kwargs):
+        """See :class:`Group` doc"""
+        kwargs['parent'] = self
+        group = Group(func, **kwargs)
+        self.slash[group.name] = group
+
+    def to_dict(self):
+        data = {
+            'name': self.name,
+            'description': self.description
+        }
+        if self.slash:
+            data['options'] = []
+            for sub in self.slash.values():
+                ddict = sub.to_dict()
+                if isinstance(sub, Group):
+                    ddict['type'] = ApplicationCommandOptionType.SUB_COMMAND_GROUP
+                elif isinstance(sub, Command):
+                    ddict['type'] = ApplicationCommandOptionType.SUB_COMMAND
+                else:
+                    raise ValueError(f'What is a {type(sub).__name__} doing here?')
+                data['options'].append(ddict)
+        return data
 
 def cmd(**kwargs):
     """Decorator that transforms a function into a :class:`Command`"""
     def decorator(func):
         return Command(func, **kwargs)
     return decorator
+
+def group(**kwargs):
+    """Decorator that transforms a function into a :class:`Group`"""
+    def decorator(func):
+        return Group(func, **kwargs)
+    return decorator
+
+logger = logging.getLogger('discord.ext.status')
+logger.setLevel(logging.INFO)
 
 class SlashBot(commands.Bot):
     """A bot that supports slash commands."""
@@ -373,12 +557,18 @@ class SlashBot(commands.Bot):
         self.debug_guild = kwargs.pop('debug_guild', None)
         super().__init__(*args, **kwargs)
         self.slash = set()
-        self._connection.parsers['INTERACTION_CREATE'] = lambda data: (
-            self._connection.dispatch('interaction_create', data))
         @self.listen()
         async def on_ready():
-            await self.register_commands()
             self.remove_listener(on_ready)
+            # only start listening to interaction-create once ready
+            self._connection.parsers.setdefault('INTERACTION_CREATE', lambda data: (
+                self._connection.dispatch('interaction_create', data)))
+            try:
+                await self.register_commands()
+            except discord.HTTPException:
+                logger.exception('Registering commands failed')
+                asyncio.create_task(self.close())
+                raise
 
     def slash_cmd(self, **kwargs):
         """See :class:`Command` doc"""
@@ -392,11 +582,26 @@ class SlashBot(commands.Bot):
         """See :class:`Command` doc"""
         self.slash.add(Command(func, **kwargs))
 
+    def slash_group(self, **kwargs):
+        """See :class:`Group` doc"""
+        def decorator(func):
+            group = Group(func, **kwargs)
+            self.slash.add(group)
+            return group
+        return decorator
+
+    def add_slash_group(self, func, **kwargs):
+        """See :class:`Group` doc"""
+        group = Group(func, **kwargs)
+        self.slash.add(group)
+
     def add_slash_cog(self, cog):
-        """Add all attributes of ``cog`` are :class:`Command` instances."""
+        """Add all attributes of ``cog`` that are
+        :class:`Group` or :class:`Command` instances.
+        """
         for key in dir(cog):
             obj = getattr(cog, key)
-            if isinstance(obj, Command):
+            if isinstance(obj, (Group, Command)):
                 self.slash.add(obj)
 
     async def application_info(self):
@@ -404,18 +609,21 @@ class SlashBot(commands.Bot):
         return self.app_info
 
     async def on_interaction_create(self, event: dict):
-        ctx = Context(self)
-        await ctx._ainit(event)
+        if event['version'] != 1:
+            raise RuntimeError(
+                f'Interaction data version {event["version"]} is not supported'
+                ', please open an issue for this: '
+                'https://github.com/Kenny2github/discord-ext-slash/issues/new')
         for maybe_cmd in self.slash:
             if maybe_cmd.id == event['data']['id']:
                 cmd = maybe_cmd
                 break
         else:
-            self.dispatch('error', commands.CommandNotFound(
-                f'No command {ctx.command!r} found'))
-        ctx.command = cmd
+            raise commands.CommandNotFound(
+                f'No command {event["data"]["name"]!r} found')
+        ctx = await Context(self, cmd, event)
         try:
-            await cmd.invoke(ctx, event['data'].get('options', []))
+            await ctx.command.invoke(ctx)
         except commands.CommandError as exc:
             self.dispatch('command_error', ctx, exc)
         except asyncio.CancelledError:
@@ -430,21 +638,70 @@ class SlashBot(commands.Bot):
         app_info = await self.application_info()
         global_path = f"/applications/{app_info.id}/commands"
         guild_path = f"/applications/{app_info.id}/guilds/{{0}}/commands"
+        guilds = {}
         for cmd in self.slash:
-            data = cmd.to_dict()
-            if cmd.guild_id is not None:
-                # guild-specific commands
-                route = _Route('POST', guild_path.format(cmd.guild_id))
+            cmd.guild_id = cmd.guild_id or self.debug_guild
+            guilds.setdefault(cmd.guild_id, {})[cmd.name] = cmd
+        state = {
+            'POST': {},
+            'PATCH': {},
+            'DELETE': {}
+        }
+        route = _Route('GET', global_path)
+        if None in guilds:
+            global_cmds = await self.http.request(route)
+            await self.sync_cmds(state, guilds[None], global_cmds, None)
+        for guild_id, guild in guilds.items():
+            if guild_id is None:
+                continue
+            route = _Route('GET', guild_path.format(guild_id))
+            guild_cmds = await self.http.request(route)
+            await self.sync_cmds(state, guild, guild_cmds, guild_id)
+        del guilds
+        for method, guilds in state.items():
+            for guild_id, guild in guilds.items():
+                for name, kwargs in guild.items():
+                    if guild_id is None:
+                        path = global_path
+                    else:
+                        path = guild_path.format(guild_id)
+                    if 'id' in kwargs:
+                        path += f'/{kwargs.pop("id")}'
+                    route = _Route(method, path)
+                    asyncio.create_task(self.process_command(
+                        name, guild_id, route, kwargs))
+
+    async def sync_cmds(self, state, todo, done, guild_id):
+        # todo - registered in code
+        # done - registered on API
+        done = {data['name']: data for data in done}
+        # in the API but not in code
+        to_delete = set(done.keys()) - set(todo.keys())
+        # in both, filtering done later to see which ones to update
+        to_update = set(done.keys()) & set(todo.keys())
+        # in code but not in API
+        to_create = set(todo.keys()) - set(done.keys())
+        for name in to_create:
+            state['POST'].setdefault(guild_id, {})[name] \
+                = {'json': todo[name].to_dict(), 'cmd': todo[name]}
+        for name in to_update:
+            cmd_dict = todo[name].to_dict()
+            cmd_dict['id'] = done[name]['id']
+            cmd_dict['application_id'] = done[name]['application_id']
+            if done[name] == cmd_dict:
+                logger.debug('GET\t%s\tin guild\t%s', name, guild_id)
+                todo[name].id = done[name]['id']
             else:
-                route = _Route(
-                    'POST',
-                    guild_path.format(self.debug_guild)
-                    if self.debug_guild is not None
-                    else global_path)
-            await self.register_command(cmd, route, data)
+                state['PATCH'].setdefault(guild_id, {})[name] \
+                    = {'json': todo[name].to_dict(), 'id': done[name]['id'],
+                       'cmd': todo[name]}
+        for name in to_delete:
+            state['DELETE'].setdefault(guild_id, {})[name] \
+                = {'id': done[name]['id']}
 
-    async def register_command(self, cmd, route, data):
-        resp = await self.http.request(route, json=data)
-        cmd.id = resp['id']
-
-# TODO: subcommands
+    async def process_command(self, name, guild_id, route, kwargs):
+        cmd = kwargs.pop('cmd', None)
+        data = await self.http.request(route, **kwargs)
+        if cmd is not None:
+            cmd.id = data['id']
+        logger.debug('%s\t%s\tin guild\t%s', route.method, name, guild_id)
