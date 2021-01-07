@@ -60,7 +60,7 @@ import asyncio
 import discord
 from discord.ext import commands
 
-__version__ = '0.1.2'
+__version__ = '0.1.3'
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
@@ -150,7 +150,6 @@ class Context(discord.Object, _AsyncInit):
         Webhook used for sending followup messages.
         None until interaction response has been sent
     """
-    cog = None # not a thing, but some things check for it
 
     async def __init__(self, client: SlashBot, cmd: Command, event: dict):
         self.client = client
@@ -189,10 +188,18 @@ class Context(discord.Object, _AsyncInit):
         self.webhook = None
 
     async def _kwargs_from_options(self, options):
+        self.cog = self.command.cog
         kwargs = {}
         for opt in options:
             if 'value' in opt:
                 value = opt['value']
+                for k, v in self.command.options.items():
+                    if v.name == opt['name']:
+                        opt['name'] = k
+                        break
+                else:
+                    raise commands.CommandInvokeError(
+                        f'No such option: {opt["name"]!r}')
                 opttype = self.command.options[opt['name']].type
                 if opttype == ApplicationCommandOptionType.USER:
                     try:
@@ -219,17 +226,25 @@ class Context(discord.Object, _AsyncInit):
                 self.command = self.command.slash[opt['name']]
                 await self._kwargs_from_options(opt['options'])
                 return
-        kwargs[self.command._ctx_arg] = self
-        self.options = kwargs
+        if isinstance(self.command, Command):
+            kwargs[self.command._ctx_arg] = self
+            self.options = kwargs
+        elif isinstance(self.command, Group):
+            self.command = self.command.slash[opt['name']]
+            await self._kwargs_from_options(opt.get('options', []))
 
-    async def respond(self, content='', *, embeds=None, allowed_mentions=None,
-                      rtype=InteractionResponseType.ChannelMessageWithSource):
+    async def respond(
+        self, content='', *, embed=None, embeds=None, allowed_mentions=None,
+        rtype=InteractionResponseType.ChannelMessageWithSource
+    ):
         """Respond to the interaction. If called again, edits the response.
 
         Parameters
         -----------
         content: :class:`str`
             The content of the message.
+        embed: :class:`discord.Embed`
+            Shorthand for respond(embeds=[embed])
         embeds: Iterable[:class:`discord.Embed`]
             Up to 10 embeds (any more will be silently discarded)
         allowed_mentions: :class:`discord.AllowedMentions`
@@ -237,6 +252,10 @@ class Context(discord.Object, _AsyncInit):
         rtype: :class:`InteractionResponseType`
             The type of response to send. See that class's documentation.
         """
+        if embed and embeds:
+            raise TypeError('Cannot specify both embed and embeds')
+        if embed:
+            embeds = [embed]
         if embeds:
             embeds = [emb.to_dict() for emb, _ in zip(embeds, range(10))]
         mentions = self.client.allowed_mentions
@@ -309,8 +328,7 @@ class Option:
     name: Optional[:class:`str`]
         The name of the option, if different from its argument name.
     default: Optional[:class:`bool`]
-        If ``True``, this is the first ``required`` option to complete.
-        Only one option can be ``default``. This defaults to ``False``.
+        No idea what this does. It doesn't work anyway.
     required: Optional[:class:`bool`]
         If ``True``, this option must be specified for a valid command
         invocation. Defaults to ``False``.
@@ -399,11 +417,15 @@ class Command:
         Callback that prevents command execution
         if it returns False (not falsy, False).
     """
+    cog = None
+
     def __init__(self, coro: Coroutine, **kwargs):
         self.id = None
         self.name = kwargs.pop('name', coro.__name__)
         self.description = kwargs.pop('description', coro.__doc__)
-        self.guild_id = int(kwargs.pop('guild', None))
+        self.guild_id = kwargs.pop('guild', None)
+        if self.guild_id is not None:
+            self.guild_id = int(self.guild_id)
         self.parent = kwargs.pop('parent', None)
         self._ctx_arg = None
         self.options = {}
@@ -445,7 +467,11 @@ class Command:
         parents = [] # highest level parent last
         parent = self.parent
         while parent is not None:
-            parents.append(parent.coro)
+            if parent.cog is not None:
+                parents.append(lambda ctx, parent=parent, *args, **kwargs:
+                    parent.coro(parent.cog, ctx, *args, **kwargs))
+            else:
+                parents.append(parent.coro)
             parent = parent.parent
         parents.extend(ctx.client._checks)
         parents.append(self._check)
@@ -456,7 +482,10 @@ class Command:
         logger.debug('User %s running, in guild %s channel %s, command: %s',
                      ctx.author.id, ctx.guild.id, ctx.channel.id,
                      ctx.command.qualname)
-        await self.coro(**ctx.options)
+        if self.cog is not None:
+            await self.coro(self.cog, **ctx.options)
+        else:
+            await self.coro(**ctx.options)
 
     def check(self, coro):
         """Set this command's check to this coroutine.
@@ -485,6 +514,8 @@ class Group:
         If this returns False (not falsy, False),
     slash: Mapping[:class:`str`, Union[:class:`Group`, :class:`Command`]]
     """
+    cog = None
+
     def __init__(self, coro: Coroutine, **kwargs):
         self.id = None
         self.name = kwargs.pop('name', coro.__name__)
@@ -506,13 +537,13 @@ class Group:
         kwargs['parent'] = self
         def decorator(func):
             cmd = Command(func, **kwargs)
+            cmd.cog = self.cog
             self.slash[cmd.name] = cmd
             return cmd
         return decorator
 
     def add_slash(self, func, **kwargs):
         """See :class:`Command` doc"""
-        kwargs['parent'] = self
         self.slash_cmd(**kwargs)(func)
 
     def slash_group(self, **kwargs):
@@ -520,13 +551,13 @@ class Group:
         kwargs['parent'] = self
         def decorator(func):
             group = Group(func, **kwargs)
+            group.cog = self.cog
             self.slash[group.name] = group
             return group
         return decorator
 
     def add_slash_group(self, func, **kwargs):
         """See :class:`Group` doc"""
-        kwargs['parent'] = self
         self.slash_group(**kwargs)(func)
 
     def to_dict(self):
@@ -608,12 +639,14 @@ class SlashBot(commands.Bot):
 
     def add_slash_cog(self, cog):
         """Add all attributes of ``cog`` that are
-        :class:`Group` or :class:`Command` instances.
+        :class:`Command` or :class:`Group` instances.
         """
         for key in dir(cog):
             obj = getattr(cog, key)
             if isinstance(obj, (Group, Command)):
-                self.slash.add(obj)
+                obj.cog = cog
+                if obj.parent is None:
+                    self.slash.add(obj)
 
     async def application_info(self):
         self.app_info = await super().application_info()
@@ -712,7 +745,11 @@ class SlashBot(commands.Bot):
 
     async def process_command(self, name, guild_id, route, kwargs):
         cmd = kwargs.pop('cmd', None)
-        data = await self.http.request(route, **kwargs)
+        try:
+            data = await self.http.request(route, **kwargs)
+        except discord.HTTPException:
+            logger.exception('Error when processing command %s', name)
+            return
         if cmd is not None:
             cmd.id = int(data['id'])
         logger.debug('%s\t%s\tin guild\t%s', route.method, name, guild_id)
