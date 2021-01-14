@@ -17,7 +17,7 @@ Example Usage
         # properly global - note that they take 1 hour to
         # propagate. Useful because commands are
         # re-registered every time the bot starts.
-        debug_guild=7293012031203012
+        debug_guild=staging_guild_id
     )
 
     msg_opt = slash.Option(
