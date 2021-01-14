@@ -607,8 +607,8 @@ class SlashBot(commands.Bot):
     """A bot that supports slash commands."""
 
     def __init__(self, *args, **kwargs):
-        self.debug_guild = kwargs.pop('debug_guild', None)
         super().__init__(*args, **kwargs)
+        self.debug_guild = int(kwargs.pop('debug_guild', 0)) or None
         self.slash = set()
         @self.listen()
         async def on_ready():
