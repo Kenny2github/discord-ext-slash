@@ -464,21 +464,9 @@ class Command:
         return data
 
     async def invoke(self, ctx):
-        parents = [] # highest level parent last
-        parent = self.parent
-        while parent is not None:
-            if parent.cog is not None:
-                parents.append(lambda ctx, parent=parent, *args, **kwargs:
-                    parent.coro(parent.cog, ctx, *args, **kwargs))
-            else:
-                parents.append(parent.coro)
-            parent = parent.parent
-        parents.extend(ctx.client._checks)
-        parents.append(self._check)
-        parents.reverse()
-        for check in parents:
-            if await check(ctx) is False:
-                return
+        if not await self.can_run(ctx):
+            raise commands.CheckFailure(
+                f'The check functions for {self.qualname} failed.')
         logger.debug('User %s running, in guild %s channel %s, command: %s',
                      ctx.author.id, ctx.guild.id, ctx.channel.id,
                      ctx.command.qualname)
@@ -492,6 +480,28 @@ class Command:
         Can be used as a decorator.
         """
         self._check = coro
+
+    async def can_run(self, ctx):
+        parents = []  # highest level parent last
+        cogs = []
+        parent = self.parent
+        while parent is not None:
+            if parent.cog is not None:
+                parents.append(lambda ctx, parent=parent, *args, **kwargs:
+                               parent.coro(parent.cog, ctx, *args, **kwargs))
+                if hasattr(parent.cog, 'cog_check') and parent.cog not in cogs:
+                    cogs.append(parent.cog.cog_check)
+            else:
+                parents.append(parent.coro)
+            parent = parent.parent
+        parents.extend(cogs)
+        parents.extend(ctx.client._checks)
+        parents.reverse()  # highest level parent first
+        parents.append(self._check)
+        for check in parents:
+            if await check(ctx) is False:
+                return False
+        return True
 
 class Group:
     """Represents a group of slash commands.
