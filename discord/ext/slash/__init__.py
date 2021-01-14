@@ -61,7 +61,7 @@ import asyncio
 import discord
 from discord.ext import commands
 
-__version__ = '0.1.3'
+__version__ = '0.1.4'
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
