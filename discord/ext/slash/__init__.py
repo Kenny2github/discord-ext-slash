@@ -253,6 +253,7 @@ class Context(discord.Object, _AsyncInit):
         rtype: :class:`InteractionResponseType`
             The type of response to send. See that class's documentation.
         """
+        content = str(content)
         if embed and embeds:
             raise TypeError('Cannot specify both embed and embeds')
         if embed:
