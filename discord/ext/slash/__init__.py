@@ -15,8 +15,8 @@ Example Usage
         # for the purposes of testing. Remove this argument
         # or set it to None to make global commands be
         # properly global - note that they take 1 hour to
-        # propagate. Useful because commands are
-        # re-registered every time the bot starts.
+        # propagate. Useful because commands have to be
+        # re-registered if their API definitions are changed.
         debug_guild=staging_guild_id
     )
 
@@ -33,7 +33,8 @@ Example Usage
         message: msg_opt
     ):
         """Send a message in the bot's name""" # description of command
-        await ctx.respond(message, # respond to the interaction
+        # respond to the interaction, must be done within 3 seconds
+        await ctx.respond(message, # string (or str()able) message
             # sends a message without showing the command invocation
             rtype=slash.InteractionResponseType.ChannelMessage)
 
