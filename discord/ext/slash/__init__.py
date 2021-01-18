@@ -108,6 +108,17 @@ class InteractionResponseType(IntEnum):
     # ACK a command without sending a message, showing the user's input
     AcknowledgeWithSource = 5
 
+class MessageFlags(IntEnum):
+    """Flags to pass to the ``flags`` argument of the interaction response.
+    See also: https://discord.dev/resources/channel#message-object-message-flags
+    """
+    CROSSPOSTED = 1 << 0
+    IS_CROSSPOST = 1 << 1
+    SUPPRESS_EMBEDS = 1 << 2
+    SOURCE_MESSAGE_DELETED = 1 << 3
+    URGENT = 1 << 4
+    EPHEMERAL = 1 << 6
+
 class _Route(discord.http.Route):
     BASE = 'https://discord.com/api/v8'
 
@@ -242,7 +253,7 @@ class Context(discord.Object, _AsyncInit):
 
     async def respond(
         self, content='', *, embed=None, embeds=None, allowed_mentions=None,
-        rtype=InteractionResponseType.ChannelMessageWithSource
+        flags=None, rtype=InteractionResponseType.ChannelMessageWithSource
     ):
         """Respond to the interaction. If called again, edits the response.
 
@@ -256,6 +267,8 @@ class Context(discord.Object, _AsyncInit):
             Up to 10 embeds (any more will be silently discarded)
         allowed_mentions: :class:`discord.AllowedMentions`
             Mirrors normal ``allowed_mentions`` in Messageable.send
+        flags: Union[int, :class:`MessageFlags`]
+            Message flags, ORed together
         rtype: :class:`InteractionResponseType`
             The type of response to send. See that class's documentation.
         """
@@ -296,6 +309,8 @@ class Context(discord.Object, _AsyncInit):
                 data['data']['embeds'] = embeds
             if mentions is not None:
                 data['allowed_mentions'] = mentions.to_dict()
+            if flags and 'data' in data:
+                data['data']['flags'] = int(flags)
             path = f"/interactions/{self.id}/{self.token}/callback"
             route = _Route('POST', path, channel_id=self.channel.id,
                            guild_id=self.guild.id)
