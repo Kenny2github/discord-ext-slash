@@ -174,35 +174,29 @@ class Context(discord.Object, _AsyncInit):
         except discord.HTTPException:
             self.guild = discord.Object(event['guild_id'])
             logger.debug('Fetching guild %s for interaction %s failed',
-                         self.guild.id, self.id, exc_info=True)
+                         self.guild.id, self.id)
         try:
             self.channel = await self.client.fetch_channel(int(event['channel_id']))
         except discord.HTTPException:
             self.channel = discord.Object(event['channel_id'])
             logger.debug('Fetching channel %s for interaction %s failed',
-                         self.channel.id, self.id, exc_info=True)
+                         self.channel.id, self.id)
         try:
             self.author = await self.guild.fetch_member(int(event['member']['user']['id']))
-        except AttributeError:
-            pass
-        except discord.HTTPException:
+        except (discord.HTTPException, AttributeError):
             self.author = discord.Member(
                 data=event['member'], guild=self.guild, state=self.client._connection)
-            logger.debug('Fetching member for interaction %s failed',
-                         self.id, exc_info=True)
+            logger.debug('Fetching member for interaction %s failed', self.id)
         self.token = event['token']
         # construct options into function-friendly form
         await self._kwargs_from_options(event['data'].get('options', []))
         try:
             self.me = await self.guild.fetch_member(self.client.user.id)
-        except AttributeError:
-            pass
-        except discord.HTTPException:
+        except (discord.HTTPException, AttributeError):
             self.me = None
             logger.debug('Fetching member %s (me) in guild %s '
                          'for interaction %s failed',
-                         self.client.user.id, self.guild.id,
-                         self.id, exc_info=True)
+                         self.client.user.id, self.guild.id, self.id)
         self.webhook = None
 
     async def _kwargs_from_options(self, options):
@@ -222,25 +216,23 @@ class Context(discord.Object, _AsyncInit):
                 if opttype == ApplicationCommandOptionType.USER:
                     try:
                         value = await self.guild.fetch_member(int(value))
-                    except AttributeError:
-                        pass
-                    except discord.HTTPException:
-                        logger.debug('Fetching member %s for interaction %s failed',
-                                     value, self.id, exc_info=True)
+                    except (discord.HTTPException, AttributeError):
                         value = discord.Object(value)
+                        logger.debug('Fetching member %s for interaction %s failed',
+                                     value, self.id)
                 elif opttype == ApplicationCommandOptionType.CHANNEL:
                     try:
                         value = await self.client.fetch_channel(int(value))
-                    except discord.HTTPException:
-                        logger.debug('Fetching channel %s for interaction %s failed',
-                                     value, self.id, exc_info=True)
+                    except (discord.HTTPException, AttributeError):
                         value = discord.Object(value)
+                        logger.debug('Fetching channel %s for interaction %s failed',
+                                     value, self.id)
                 elif opttype == ApplicationCommandOptionType.ROLE:
                     value = self.guild.get_role(int(value))
                     if value is None:
-                        logger.debug('Getting role %s for interaction %s failed',
-                                     value, self.id, exc_info=True)
                         value = discord.Object(value)
+                        logger.debug('Getting role %s for interaction %s failed',
+                                     value, self.id)
                 kwargs[opt['name']] = value
             elif 'options' in opt:
                 self.command = self.command.slash[opt['name']]
