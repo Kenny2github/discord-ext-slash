@@ -309,7 +309,7 @@ class Context(discord.Object, _AsyncInit):
             if embeds:
                 data['data']['embeds'] = embeds
             if mentions is not None:
-                data['allowed_mentions'] = mentions.to_dict()
+                data['data']['allowed_mentions'] = mentions.to_dict()
             if flags and 'data' in data:
                 data['data']['flags'] = int(flags)
             path = f"/interactions/{self.id}/{self.token}/callback"

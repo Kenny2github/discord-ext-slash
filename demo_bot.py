@@ -17,11 +17,9 @@ async def hello(ctx: slash.Context):
 @client.slash_group()
 async def say(ctx: slash.Context):
     """Send a message in the bot's name."""
-    # The API currently does not actually support allowed_mentions,
-    # so bar mentions completely to prevent an @everyone in the bot's name
-    if 'message' in ctx.options and '@' in ctx.options['message']:
+    if 'message' in ctx.options and '#' in ctx.options['message']:
         await ctx.respond(embeds=[
-            discord.Embed(title='No mentions!',color=0xff0000)])
+            discord.Embed(title='No hashtags!',color=0xff0000)])
         # Groups are executed as checks, so returning False (not None!)
         # prevents subcommands from running
         return False
