@@ -55,6 +55,7 @@ See the wiki_.
 from __future__ import annotations
 from enum import IntEnum
 from typing import Coroutine, Union
+from functools import partial
 import logging
 import datetime
 import asyncio
@@ -502,6 +503,7 @@ class Command:
         logger.debug('User %s running, in guild %s channel %s, command: %s',
                      ctx.author.id, ctx.guild.id, ctx.channel.id,
                      ctx.command.qualname)
+        await self.invoke_parents(ctx)
         if self.cog is not None:
             await self.coro(self.cog, **ctx.options)
         else:
@@ -519,12 +521,12 @@ class Command:
         parent = self.parent
         while parent is not None:
             if parent.cog is not None:
-                parents.append(lambda ctx, parent=parent, *args, **kwargs:
-                               parent.coro(parent.cog, ctx, *args, **kwargs))
-                if hasattr(parent.cog, 'cog_check') and parent.cog not in cogs:
-                    cogs.append(parent.cog.cog_check)
+                if hasattr(parent.cog, 'cog_check'):
+                    if parent.cog.cog_check not in cogs:
+                        cogs.append(parent.cog.cog_check)
+                parents.append(partial(parent._check, parent.cog))
             else:
-                parents.append(parent.coro)
+                parents.append(parent._check)
             parent = parent.parent
         parents.extend(cogs)
         parents.extend(ctx.client._checks)
@@ -535,44 +537,45 @@ class Command:
                 return False
         return True
 
-class Group:
+    async def invoke_parents(self, ctx):
+        parents = []
+        parent = self.parent
+        while parent is not None:
+            if not parent.in_addition:
+                parent = parent.parent
+                continue
+            if parent.cog is not None:
+                parents.append(partial(parent.coro, parent.cog))
+            else:
+                parents.append(parent.coro)
+            parent = parent.parent
+        parents.reverse()
+        for coro in parents:
+            await coro(ctx)
+
+class Group(Command):
     """Represents a group of slash commands.
+    Attributes are the same unless documented below.
 
     Attributes
     -----------
-    id: Optional[:class:`int`]
-        ID of registered group. Can be None when not yet registered,
-        or if not a top-level group.
-    name: :class:`str`
-        (Sub)command group name. Defaults to coro name.
-    description: :class:`str`
-        Description shown in command list. Defaults to coro doc.
-    guild_id: Optional[:class:`int`]
-        If present, this group only exists in this guild.
-    parent: Optional[:class:`Group`]
-        Parent command group.
     coro: Coroutine
-        Callback invoked **BEFORE** child callback is invoked.
-        If this returns False (not falsy, False),
+        (Required) Callback invoked when this group is called.
+        (Base groups cannot currently be called,
+        but it will become possible at some point:
+        https://github.com/discord/discord-api-docs/issues/2393)
+    in_addition: :class:`bool`
+        If ``True``, ``coro`` is invoked before a child command is.
+        If ``False``, ``coro`` is only invoked when calling the base group.
     slash: Mapping[:class:`str`, Union[:class:`Group`, :class:`Command`]]
+        Subcommands of this group.
     """
     cog = None
 
-    def __init__(self, coro: Coroutine, **kwargs):
-        self.id = None
-        self.name = kwargs.pop('name', coro.__name__)
-        self.description = kwargs.pop('description', coro.__doc__)
-        self.guild_id = kwargs.pop('guild_id', None)
-        self.parent = kwargs.pop('parent', None)
-        self.coro = coro
+    def __init__(self, coro: Coroutine, in_addition=False, **kwargs):
+        super().__init__(coro, **kwargs)
+        self.in_addition = in_addition
         self.slash = {}
-
-    @property
-    def qualname(self):
-        """Fully qualified name of command, including group names."""
-        if self.parent is None:
-            return self.name
-        return self.parent.qualname + ' ' + self.name
 
     def slash_cmd(self, **kwargs):
         """See :class:`Command` doc"""

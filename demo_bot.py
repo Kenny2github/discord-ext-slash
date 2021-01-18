@@ -14,14 +14,17 @@ async def hello(ctx: slash.Context):
     """Hello World!"""
     await ctx.respond('Hello World!')
 
-@client.slash_group()
+@client.slash_group(in_addition=True)
 async def say(ctx: slash.Context):
     """Send a message in the bot's name."""
+    print('Options:', ctx.options)
+
+@say.check
+async def check_no_hashtags(ctx: slash.Context):
     if 'message' in ctx.options and '#' in ctx.options['message']:
         await ctx.respond(embeds=[
             discord.Embed(title='No hashtags!',color=0xff0000)])
-        # Groups are executed as checks, so returning False (not None!)
-        # prevents subcommands from running
+        # Returning False (not None!) prevents subcommands from running
         return False
 
 emote_opt = slash.Option(
