@@ -602,7 +602,7 @@ def group(**kwargs):
         return Group(func, **kwargs)
     return decorator
 
-logger = logging.getLogger('discord.ext.status')
+logger = logging.getLogger('discord.ext.slash')
 logger.setLevel(logging.INFO)
 
 class SlashBot(commands.Bot):
