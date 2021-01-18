@@ -12,7 +12,8 @@ client = slash.SlashBot(
 @client.slash_cmd()
 async def hello(ctx: slash.Context):
     """Hello World!"""
-    await ctx.respond('Hello World!')
+    await ctx.respond('Hello World!', flags=slash.MessageFlags.EPHEMERAL,
+                      rtype=slash.InteractionResponseType.ChannelMessage)
 
 @client.slash_group(in_addition=True)
 async def say(ctx: slash.Context):
@@ -63,10 +64,12 @@ async def check_owner(ctx: slash.Context):
             discord.Embed(title='You are not the owner!', color=0xff0000)])
         return False
 
-token = os.environ['DISCORD_TOKEN'].strip()
-logging.basicConfig(handlers=[logging.StreamHandler()])
+# show extension logs
 logger = logging.getLogger('discord.ext.slash')
 logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler())
+
+token = os.environ['DISCORD_TOKEN'].strip()
 
 try:
     client.run(token)
