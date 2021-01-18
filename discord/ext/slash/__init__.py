@@ -88,7 +88,8 @@ class InteractionResponseType(IntEnum):
     .. attribute:: ChannelMessage
 
         Respond with a message, but don't show user input.
-        Probably best suited for admin commands
+        Probably best suited for admin commands,
+        or commands with ephemeral responses.
     .. attribute:: ChannelMessageWithSource
 
         Show user input and send a message. Default.
