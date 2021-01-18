@@ -245,6 +245,9 @@ class Context(discord.Object, _AsyncInit):
             self.command = self.command.slash[opt['name']]
             await self._kwargs_from_options(opt.get('options', []))
 
+    def __repr__(self):
+        return f'<Interaction id={self.id}>'
+
     async def respond(
         self, content='', *, embed=None, embeds=None, allowed_mentions=None,
         flags=None, rtype=InteractionResponseType.ChannelMessageWithSource
@@ -368,6 +371,11 @@ class Option:
         if self.choices is not None:
             self.choices = [Choice.from_data(c) for c in self.choices]
 
+    def __repr__(self):
+        return ("Option(name={0.name!r}, type='{0.type!s}', description=..., "
+                'default={0.default}, required={0.required}, '
+                'choices={1})').format(self, '[...]' if self.choices else '[]')
+
     def to_dict(self):
         data = {
             'type': int(self.type),
@@ -398,6 +406,9 @@ class Choice:
     def __init__(self, name: str, value: str):
         self.name = name
         self.value = value
+
+    def __repr__(self):
+        return f'Choice(name={self.name!r}, value={self.value!r})'
 
     @classmethod
     def from_data(cls, data):
@@ -467,6 +478,9 @@ class Command:
         if self.parent is None:
             return self.name
         return self.parent.qualname + ' ' + self.name
+
+    def __str__(self):
+        return self.qualname
 
     def __hash__(self):
         return hash((self.name, self.guild_id))
