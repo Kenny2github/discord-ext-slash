@@ -170,7 +170,9 @@ class Context(discord.Object, _AsyncInit):
                          self.channel.id, self.id, exc_info=True)
         try:
             self.author = await self.guild.fetch_member(int(event['member']['user']['id']))
-        except (discord.HTTPException, AttributeError):
+        except AttributeError:
+            pass
+        except discord.HTTPException:
             self.author = discord.Member(
                 data=event['member'], guild=self.guild, state=self.client._connection)
             logger.debug('Fetching member for interaction %s failed',
@@ -180,7 +182,9 @@ class Context(discord.Object, _AsyncInit):
         await self._kwargs_from_options(event['data'].get('options', []))
         try:
             self.me = await self.guild.fetch_member(self.client.user.id)
-        except (discord.HTTPException, AttributeError):
+        except AttributeError:
+            pass
+        except discord.HTTPException:
             self.me = None
             logger.debug('Fetching member %s (me) in guild %s '
                          'for interaction %s failed',
@@ -205,7 +209,9 @@ class Context(discord.Object, _AsyncInit):
                 if opttype == ApplicationCommandOptionType.USER:
                     try:
                         value = await self.guild.fetch_member(int(value))
-                    except (discord.HTTPException, AttributeError):
+                    except AttributeError:
+                        pass
+                    except discord.HTTPException:
                         logger.debug('Fetching member %s for interaction %s failed',
                                      value, self.id, exc_info=True)
                         value = discord.Object(value)
