@@ -424,8 +424,10 @@ class Choice:
 class Command:
     """Represents a slash command.
 
-    Parameters
+    Attributes
     -----------
+    coro: Coroutine
+        (Required) Original callback for the command.
     id: Optional[:class:`int`]
         ID of registered command. Can be None when not yet registered,
         or if not a top-level command.
@@ -438,9 +440,8 @@ class Command:
     parent: Optional[:class:`Group`]
         Parent (sub)command group.
     options: Mapping[:class:`str`, :class:`Option`]
-        Options for this command.
-    coro: Coroutine
-        Original callback for the command.
+        Options for this command. Not passable as a parameter;
+        can only be set by inspecting the function annotations.
     check: Coroutine
         Callback that prevents command execution
         if it returns False (not falsy, False).
