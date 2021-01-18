@@ -117,6 +117,7 @@ class MessageFlags(IntEnum):
     SUPPRESS_EMBEDS = 1 << 2
     SOURCE_MESSAGE_DELETED = 1 << 3
     URGENT = 1 << 4
+    HAS_THREAD = 1 << 5
     EPHEMERAL = 1 << 6
 
 class _Route(discord.http.Route):
