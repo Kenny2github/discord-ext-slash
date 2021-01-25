@@ -348,8 +348,6 @@ class Option:
         :attr:`ApplicationCommandOptionType.STRING`
     name: Optional[:class:`str`]
         The name of the option, if different from its argument name.
-    default: Optional[:class:`bool`]
-        No idea what this does. It doesn't work anyway.
     required: Optional[:class:`bool`]
         If ``True``, this option must be specified for a valid command
         invocation. Defaults to ``False``.
@@ -366,7 +364,7 @@ class Option:
         self.name = kwargs.pop('name', None) # can be set automatically
         self.type = type
         self.description = description
-        self.default = kwargs.pop('default', False)
+        self.default = False #kwargs.pop('default', False)
         self.required = kwargs.pop('required', False)
         self.choices = kwargs.pop('choices', None)
         if self.choices is not None:
@@ -460,8 +458,11 @@ class Command:
         self._ctx_arg = None
         self.options = {}
         for arg, typ in coro.__annotations__.items():
-            if typ is Context:
-                self._ctx_arg = arg
+            try:
+                if issubclass(typ, Context):
+                    self._ctx_arg = arg
+            except TypeError: # not even a class
+                pass
             if isinstance(typ, Option):
                 typ = typ.clone()
                 self.options[arg] = typ
@@ -710,7 +711,7 @@ class SlashBot(commands.Bot):
         else:
             raise commands.CommandNotFound(
                 f'No command {event["data"]["name"]!r} found')
-        ctx = await Context(self, cmd, event)
+        ctx = await cmd.coro.__annotations__[cmd._ctx_arg](self, cmd, event)
         try:
             await ctx.command.invoke(ctx)
         except commands.CommandError as exc:
