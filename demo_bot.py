@@ -15,7 +15,7 @@ async def hello(ctx: slash.Context):
     await ctx.respond('Hello World!', flags=slash.MessageFlags.EPHEMERAL,
                       rtype=slash.InteractionResponseType.ChannelMessage)
 
-@client.slash_group(in_addition=True)
+@client.slash_group()
 async def say(ctx: slash.Context):
     """Send a message in the bot's name."""
     print('Options:', ctx.options)
