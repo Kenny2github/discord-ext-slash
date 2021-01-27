@@ -186,7 +186,7 @@ class Context(discord.Object, _AsyncInit):
     guild: Union[discord.Guild, discord.Object]
     channel: Union[discord.TextChannel, discord.Object]
     author: discord.Member
-    command: command
+    command: Union[Command, Group]
     options: Mapping[str, Any]
     me: Optional[discord.Member]
     client: SlashBot
