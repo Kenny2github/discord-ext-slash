@@ -53,8 +53,9 @@ See the wiki_.
 .. _wiki: https://github.com/Kenny2github/discord-ext-slash/wiki
 '''
 from __future__ import annotations
+import sys
 from enum import IntEnum
-from typing import Coroutine, Union, Optional, Mapping, Any
+from typing import Coroutine, Union, Optional, Mapping, Any, get_type_hints
 from functools import partial
 import logging
 import datetime
@@ -62,7 +63,22 @@ import asyncio
 import discord
 from discord.ext import commands
 
-__version__ = '0.3.0pre1'
+__all__ = [
+    'ApplicationCommandOptionType',
+    'InteractionResponseType',
+    'MessageFlags',
+    'Context',
+    'Interaction',
+    'Option',
+    'Choice',
+    'Command',
+    'Group',
+    'cmd',
+    'group',
+    'SlashBot'
+]
+
+__version__ = '0.3.0pre2'
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
@@ -473,6 +489,13 @@ class Command:
         self._ctx_arg = None
         self.options = {}
         for arg, typ in coro.__annotations__.items():
+            if isinstance(typ, str):
+                try:
+                    # evaluate the annotation in its module's context
+                    globs = sys.modules[coro.__module__].__dict__
+                    coro.__annotations__[arg] = typ = eval(typ, globs)
+                except SyntaxError:
+                    continue
             try:
                 if issubclass(typ, Context):
                     self._ctx_arg = arg
@@ -484,7 +507,7 @@ class Command:
                 if typ.name is None:
                     typ.name = arg
         if self._ctx_arg is None:
-            raise ValueError('One argument must be type-hinted SlashContext')
+            raise ValueError('One argument must be type-hinted slash.Context')
         self.coro = coro
         async def check(ctx):
             pass
