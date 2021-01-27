@@ -62,7 +62,7 @@ import asyncio
 import discord
 from discord.ext import commands
 
-__version__ = '0.2.1'
+__version__ = '0.3.0pre1'
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
@@ -381,8 +381,8 @@ class Option:
 
     def __repr__(self):
         return ("Option(name={0.name!r}, type='{0.type!s}', description=..., "
-                'default={0.default}, required={0.required}, '
-                'choices={1})').format(self, '[...]' if self.choices else '[]')
+                'required={0.required}, choices={1})').format(
+                    self, '[...]' if self.choices else '[]')
 
     def to_dict(self):
         data = {
@@ -560,9 +560,6 @@ class Command:
         parents = []
         parent = self.parent
         while parent is not None:
-            if not parent.in_addition:
-                parent = parent.parent
-                continue
             if parent.cog is not None:
                 parents.append(partial(parent.coro, parent.cog))
             else:
