@@ -55,10 +55,9 @@ See the wiki_.
 from __future__ import annotations
 import sys
 from enum import IntEnum
-from typing import Coroutine, Union, Optional, Mapping, Any, get_type_hints
+from typing import Coroutine, Union, Optional, Mapping, Any, List
 from functools import partial
 import logging
-import datetime
 import asyncio
 import discord
 from discord.ext import commands
@@ -383,7 +382,11 @@ class Option:
         Strings are converted into Choices with the same name and value
         Dicts are passed as kwargs to the Choice constructor.
     """
-    name = None
+    description: str
+    type: ApplicationCommandOptionType = ApplicationCommandOptionType.STRING
+    name: Optional[str] = None
+    required: Optional[bool] = False
+    choices: Optional[List[Choice]] = None
 
     def __init__(self, description: str,
                  type=ApplicationCommandOptionType.STRING, **kwargs):
@@ -391,9 +394,11 @@ class Option:
         self.type = type
         self.description = description
         self.required = kwargs.pop('required', False)
-        self.choices = kwargs.pop('choices', None)
-        if self.choices is not None:
-            self.choices = [Choice.from_data(c) for c in self.choices]
+        choices = kwargs.pop('choices', None)
+        if choices is not None:
+            self.choices = [Choice.from_data(c) for c in choices]
+        else:
+            self.choices = None
 
     def __repr__(self):
         return ("Option(name={0.name!r}, type='{0.type!s}', description=..., "
@@ -425,6 +430,9 @@ class Choice:
     value: :class:`str`
         The actual value fed into the application.
     """
+    name: str
+    value: str
+
     def __init__(self, name: str, value: str):
         self.name = name
         self.value = value
