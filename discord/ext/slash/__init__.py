@@ -239,12 +239,12 @@ class Context(discord.Object, _AsyncInit):
                 self.command = self.command.slash[opt['name']]
                 await self._kwargs_from_options(opt['options'])
                 return
-        if isinstance(self.command, Command):
-            kwargs[self.command._ctx_arg] = self
-            self.options = kwargs
-        elif isinstance(self.command, Group):
+        if isinstance(self.command, Group):
             self.command = self.command.slash[opt['name']]
             await self._kwargs_from_options(opt.get('options', []))
+        elif isinstance(self.command, Command):
+            kwargs[self.command._ctx_arg] = self
+            self.options = kwargs
 
     def __repr__(self):
         return f'<Interaction id={self.id}>'
@@ -471,7 +471,7 @@ class Command:
         if self._ctx_arg is None:
             raise ValueError('One argument must be type-hinted SlashContext')
         self.coro = coro
-        async def check(ctx):
+        async def check(*args, **kwargs):
             pass
         self._check = kwargs.pop('check', check)
 
