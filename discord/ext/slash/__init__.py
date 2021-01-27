@@ -77,7 +77,7 @@ __all__ = [
     'SlashBot'
 ]
 
-__version__ = '0.3.0pre2'
+__version__ = '0.3.0pre3'
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
