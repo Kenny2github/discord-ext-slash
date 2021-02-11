@@ -53,6 +53,8 @@ See the wiki_.
 .. _wiki: https://github.com/Kenny2github/discord-ext-slash/wiki
 '''
 from __future__ import annotations
+import sys
+from warnings import warn
 from enum import IntEnum
 from typing import Coroutine, Union
 from functools import partial
@@ -62,7 +64,26 @@ import asyncio
 import discord
 from discord.ext import commands
 
+__all__ = [
+    'SlashWarning',
+    'ApplicationCommandOptionType',
+    'InteractionResponseType',
+    'MessageFlags',
+    'Context',
+    'Interaction',
+    'Option',
+    'Choice',
+    'Command',
+    'Group',
+    'cmd',
+    'group',
+    'SlashBot'
+]
+
 __version__ = '0.2.2'
+
+class SlashWarning(UserWarning):
+    """Watch out, this may cause problems down the line."""
 
 class ApplicationCommandOptionType(IntEnum):
     """Possible option types. Default is ``STRING``."""
@@ -704,13 +725,22 @@ class SlashBot(commands.Bot):
                 f'Interaction data version {event["version"]} is not supported'
                 ', please open an issue for this: '
                 'https://github.com/Kenny2github/discord-ext-slash/issues/new')
-        for maybe_cmd in self.slash:
-            if maybe_cmd.id == int(event['data']['id']):
-                cmd = maybe_cmd
-                break
-        else:
+        cmd = discord.utils.get(self.slash, id=int(event['data']['id']))
+        if cmd is None:
+            warn(f'No command {event["data"]["name"]!r} found '
+                 f'by ID {event["data"]["id"]}, falling back to '
+                 'name + guild search', SlashWarning)
+            cmd = discord.utils.get(
+                self.slash, name=event['data']['name'], guild_id=event['guild_id'])
+        if cmd is None:
+            warn(f'No command {event["data"]["name"]!r} found '
+                 f'by name and guild ID {event["guild_id"]}, '
+                 'falling back to name-only search', SlashWarning)
+            cmd = discord.utils.get(
+                self.slash, name=event['data']['name'])
+        if cmd is None:
             raise commands.CommandNotFound(
-                f'No command {event["data"]["name"]!r} found')
+                f'No command {event["data"]["name"]!r} found by any critera')
         ctx = await cmd.coro.__annotations__[cmd._ctx_arg](self, cmd, event)
         try:
             await ctx.command.invoke(ctx)
@@ -776,14 +806,15 @@ class SlashBot(commands.Bot):
                 = {'json': todo[name].to_dict(), 'cmd': todo[name]}
         for name in to_update:
             cmd_dict = todo[name].to_dict()
-            cmd_dict['id'] = done[name]['id']
-            cmd_dict['application_id'] = done[name]['application_id']
-            if done[name] == cmd_dict:
+            up_to_date = all(done[name].get(k, ...) == v
+                             for k, v in cmd_dict.items())
+            if up_to_date:
                 logger.debug('GET\t%s\tin guild\t%s', name, guild_id)
                 todo[name].id = int(done[name]['id'])
             else:
+                cmd_dict.pop('name') # can't pass this to PATCH
                 state['PATCH'].setdefault(guild_id, {})[name] \
-                    = {'json': todo[name].to_dict(), 'id': int(done[name]['id']),
+                    = {'json': cmd_dict, 'id': int(done[name]['id']),
                        'cmd': todo[name]}
         for name in to_delete:
             state['DELETE'].setdefault(guild_id, {})[name] \
@@ -794,8 +825,9 @@ class SlashBot(commands.Bot):
         try:
             data = await self.http.request(route, **kwargs)
         except discord.HTTPException:
-            logger.exception('Error when processing command %s', name)
+            logger.exception('Error when processing command %s:', name)
             return
+        finally:
+            logger.debug('%s\t%s\tin guild\t%s', route.method, name, guild_id)
         if cmd is not None:
             cmd.id = int(data['id'])
-        logger.debug('%s\t%s\tin guild\t%s', route.method, name, guild_id)
