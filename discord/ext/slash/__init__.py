@@ -356,7 +356,7 @@ class Context(discord.Object, _AsyncInit):
         Only method that works after the interaction token has expired.
         Only works if client is present there as a bot user too.
         """
-        await self.channel.send(*args, **kwargs)
+        return await self.channel.send(*args, **kwargs)
 
 Interaction = Context
 
@@ -702,7 +702,7 @@ class SlashBot(commands.Bot):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.debug_guild = int(kwargs.pop('debug_guild', 0)) or None
+        self.debug_guild = int(kwargs.pop('debug_guild', 0) or 0) or None
         self.slash = set()
         @self.listen()
         async def on_ready():
