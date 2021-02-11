@@ -47,7 +47,7 @@ Notes
   completely without the involvement of messages. However, channel and author
   information is still available.
 * All descriptions are **required**.
-* You must grant the bot `applications.commands` permissions in the OAuth2 section of the dashboard. It is recommended to also turn on "Requires OAuth2 Code Grant" in the Bot section of the developer dashboard.
+* You must grant the bot `applications.commands` permissions in the OAuth2 section of the developer dashboard.
 
 See the wiki_.
 
