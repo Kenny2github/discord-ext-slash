@@ -47,7 +47,7 @@ Notes
   completely without the involvement of messages. However, channel and author
   information is still available.
 * All descriptions are **required**.
-
+* You must grant the bot `applications.commands` permissions in the OAuth2 section of the developer dashboard.
 See the wiki_.
 
 .. _wiki: https://github.com/Kenny2github/discord-ext-slash/wiki
