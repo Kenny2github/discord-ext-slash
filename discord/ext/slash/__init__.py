@@ -47,6 +47,7 @@ Notes
   completely without the involvement of messages. However, channel and author
   information is still available.
 * All descriptions are **required**.
+* You must grant the bot ``applications.commands`` permissions in the OAuth2 section of the developer dashboard.
 
 See the wiki_.
 
@@ -56,10 +57,9 @@ from __future__ import annotations
 import sys
 from warnings import warn
 from enum import IntEnum
-from typing import Coroutine, Union
+from typing import Coroutine, Union, Optional, Mapping, Any, List
 from functools import partial
 import logging
-import datetime
 import asyncio
 import discord
 from discord.ext import commands
@@ -80,7 +80,7 @@ __all__ = [
     'SlashBot'
 ]
 
-__version__ = '0.2.3'
+__version__ = '0.3.0pre5'
 
 class SlashWarning(UserWarning):
     """Watch out, this may cause problems down the line."""
@@ -186,6 +186,16 @@ class Context(discord.Object, _AsyncInit):
         Webhook used for sending followup messages.
         None until interaction response has been sent
     """
+
+    id: int
+    guild: Union[discord.Guild, discord.Object]
+    channel: Union[discord.TextChannel, discord.Object]
+    author: discord.Member
+    command: Union[Command, Group]
+    options: Mapping[str, Any]
+    me: Optional[discord.Member]
+    client: SlashBot
+    webhook: Optional[discord.Webhook]
 
     async def __init__(self, client: SlashBot, cmd: Command, event: dict):
         self.client = client
@@ -352,7 +362,7 @@ class Context(discord.Object, _AsyncInit):
         Only method that works after the interaction token has expired.
         Only works if client is present there as a bot user too.
         """
-        await self.channel.send(*args, **kwargs)
+        return await self.channel.send(*args, **kwargs)
 
 Interaction = Context
 
@@ -378,23 +388,28 @@ class Option:
         Strings are converted into Choices with the same name and value
         Dicts are passed as kwargs to the Choice constructor.
     """
-    name = None
+    description: str
+    type: ApplicationCommandOptionType = ApplicationCommandOptionType.STRING
+    name: Optional[str] = None
+    required: Optional[bool] = False
+    choices: Optional[List[Choice]] = None
 
     def __init__(self, description: str,
                  type=ApplicationCommandOptionType.STRING, **kwargs):
         self.name = kwargs.pop('name', None) # can be set automatically
         self.type = type
         self.description = description
-        self.default = False #kwargs.pop('default', False)
         self.required = kwargs.pop('required', False)
-        self.choices = kwargs.pop('choices', None)
-        if self.choices is not None:
-            self.choices = [Choice.from_data(c) for c in self.choices]
+        choices = kwargs.pop('choices', None)
+        if choices is not None:
+            self.choices = [Choice.from_data(c) for c in choices]
+        else:
+            self.choices = None
 
     def __repr__(self):
         return ("Option(name={0.name!r}, type='{0.type!s}', description=..., "
-                'default={0.default}, required={0.required}, '
-                'choices={1})').format(self, '[...]' if self.choices else '[]')
+                'required={0.required}, choices={1})').format(
+                    self, '[...]' if self.choices else '[]')
 
     def to_dict(self):
         data = {
@@ -402,8 +417,6 @@ class Option:
             'name': self.name,
             'description': self.description,
         }
-        if self.default:
-            data['default'] = self.default
         if self.required:
             data['required'] = self.required
         if self.choices is not None:
@@ -423,6 +436,9 @@ class Choice:
     value: :class:`str`
         The actual value fed into the application.
     """
+    name: str
+    value: str
+
     def __init__(self, name: str, value: str):
         self.name = name
         self.value = value
@@ -462,16 +478,26 @@ class Command:
     options: Mapping[:class:`str`, :class:`Option`]
         Options for this command. Not passable as a parameter;
         can only be set by inspecting the function annotations.
-    check: Coroutine
-        Callback that prevents command execution
-        if it returns False (not falsy, False).
+    default: :class:`bool`
+        If ``True``, invoking the base parent of this command translates
+        into invoking this subcommand. (Not settable in arguments.)
     """
     cog = None
+    coro: Coroutine
+    id: Optional[int]
+    name: str
+    description: str
+    guild_id: Optional[int]
+    parent: Optional[Group]
+    options: Mapping[str, Option]
+    default: bool = False
 
     def __init__(self, coro: Coroutine, **kwargs):
         self.id = None
         self.name = kwargs.pop('name', coro.__name__)
         self.description = kwargs.pop('description', coro.__doc__)
+        if not self.description:
+            raise ValueError(f'Please specify a description for {self.name!r}')
         self.guild_id = kwargs.pop('guild', None)
         if self.guild_id is not None:
             self.guild_id = int(self.guild_id)
@@ -479,6 +505,13 @@ class Command:
         self._ctx_arg = None
         self.options = {}
         for arg, typ in coro.__annotations__.items():
+            if isinstance(typ, str):
+                try:
+                    # evaluate the annotation in its module's context
+                    globs = sys.modules[coro.__module__].__dict__
+                    coro.__annotations__[arg] = typ = eval(typ, globs)
+                except SyntaxError:
+                    continue
             try:
                 if issubclass(typ, Context):
                     self._ctx_arg = arg
@@ -490,7 +523,7 @@ class Command:
                 if typ.name is None:
                     typ.name = arg
         if self._ctx_arg is None:
-            raise ValueError('One argument must be type-hinted SlashContext')
+            raise ValueError('One argument must be type-hinted slash.Context')
         self.coro = coro
         async def check(*args, **kwargs):
             pass
@@ -516,6 +549,9 @@ class Command:
         }
         if self.options:
             data['options'] = [opt.to_dict() for opt in self.options.values()]
+        # TODO: the API doesn't support this yet, so it is disabled for now.
+        if self.parent is not None and False:
+            data['default'] = self.default
         return data
 
     async def invoke(self, ctx):
@@ -563,9 +599,6 @@ class Command:
         parents = []
         parent = self.parent
         while parent is not None:
-            if not parent.in_addition:
-                parent = parent.parent
-                continue
             if parent.cog is not None:
                 parents.append(partial(parent.coro, parent.cog))
             else:
@@ -582,21 +615,16 @@ class Group(Command):
     Attributes
     -----------
     coro: Coroutine
-        (Required) Callback invoked when this group is called.
-        (Base groups cannot currently be called,
-        but it will become possible at some point:
-        https://github.com/discord/discord-api-docs/issues/2393)
-    in_addition: :class:`bool`
-        If ``True``, ``coro`` is invoked before a child command is.
-        If ``False``, ``coro`` is only invoked when calling the base group.
+        (Required) Callback invoked when a subcommand of this group is called.
+        (This is not a check! Register a check using :func:`Group.check`.)
     slash: Mapping[:class:`str`, Union[:class:`Group`, :class:`Command`]]
         Subcommands of this group.
     """
     cog = None
+    slash: Mapping[str, Union[Group, Command]]
 
-    def __init__(self, coro: Coroutine, in_addition=False, **kwargs):
+    def __init__(self, coro: Coroutine, **kwargs):
         super().__init__(coro, **kwargs)
-        self.in_addition = in_addition
         self.slash = {}
 
     def slash_cmd(self, **kwargs):
@@ -627,6 +655,20 @@ class Group(Command):
         """See :class:`Group` doc"""
         self.slash_group(**kwargs)(func)
 
+    def default(self, cmd: Command):
+        """Register ``cmd`` as the default subcommand,
+        to be invoked when this base group is invoked.
+        The command must already be registered in the group.
+
+        CURRENTLY HAS NO EFFECT - default is not yet supported
+        by the API, and is therefore disabled here. This library
+        will be updated once the API is.
+        """
+        if self.slash[cmd.name] is not cmd:
+            raise ValueError(f'{cmd!s} not a subcommand of {self!s}')
+        for c in self.slash.values():
+            c.default = c is cmd
+
     def to_dict(self):
         data = {
             'name': self.name,
@@ -643,6 +685,9 @@ class Group(Command):
                 else:
                     raise ValueError(f'What is a {type(sub).__name__} doing here?')
                 data['options'].append(ddict)
+        # TODO: the API doesn't support this yet, so it is disabled for now.
+        if self.parent is not None and False:
+            data['default'] = self.default
         return data
 
 def cmd(**kwargs):
@@ -665,7 +710,7 @@ class SlashBot(commands.Bot):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.debug_guild = int(kwargs.pop('debug_guild', 0)) or None
+        self.debug_guild = int(kwargs.pop('debug_guild', 0) or 0) or None
         self.slash = set()
         @self.listen()
         async def on_ready():
