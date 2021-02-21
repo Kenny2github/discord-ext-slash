@@ -961,8 +961,8 @@ class SlashBot(commands.Bot):
                 = {'json': todo[name].to_dict(), 'cmd': todo[name]}
         for name in to_update:
             cmd_dict = todo[name].to_dict()
-            up_to_date = all(done[name].get(k, ...) == v
-                             for k, v in cmd_dict.items())
+            up_to_date = all(done[name].get(k, ...) == cmd_dict.get(k, ...)
+                             for k in {'name', 'description', 'options'})
             if up_to_date:
                 logger.debug('GET\t%s\tin guild\t%s', name, guild_id)
                 todo[name].id = int(done[name]['id'])
