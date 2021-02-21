@@ -156,6 +156,26 @@ class _AsyncInit:
     async def __init__(self):
         pass
 
+class PartialObject(discord.Object):
+    """Subclasses of this have their .guild as a discord.Object,
+    so their guild-related functionality may break.
+    """
+
+class PartialTextChannel(discord.TextChannel, PartialObject):
+    pass
+
+class PartialCategoryChannel(discord.CategoryChannel, PartialObject):
+    pass
+
+class PartialVoiceChannel(discord.VoiceChannel, PartialObject):
+    pass
+
+class PartialMember(discord.Member, PartialObject):
+    pass
+
+class PartialRole(discord.Role, PartialObject):
+    pass
+
 class Context(discord.Object, _AsyncInit):
     """Object representing an interaction.
 
@@ -212,7 +232,7 @@ class Context(discord.Object, _AsyncInit):
             discord.Object(event['channel_id']), self.client.get_channel,
             self.client.fetch_channel, 'channel')
         if event.get('member', None):
-            author = discord.Member(
+            author = PartialMember(
                 data=event['member'], guild=self.guild,
                 state=self.client._connection)
             self.author = await self._try_get(
@@ -261,7 +281,7 @@ class Context(discord.Object, _AsyncInit):
                 if opttype == ApplicationCommandOptionType.USER:
                     def resolve_member(member):
                         member['user'] = resolved['users'][str(value.id)]
-                        return discord.Member(
+                        return PartialMember(
                             data=member, guild=self.guild,
                             state=self.client._connection)
                     def resolve_user(user):
@@ -286,6 +306,12 @@ class Context(discord.Object, _AsyncInit):
                         channel.setdefault('position', -1)
                         ctype = channel['type']
                         ctype, _ = discord.channel._channel_factory(ctype)
+                        if ctype is discord.TextChannel:
+                            ctype = PartialTextChannel
+                        elif ctype is discord.CategoryChannel:
+                            ctype = PartialCategoryChannel
+                        elif ctype is discord.VoiceChannel:
+                            ctype = PartialVoiceChannel
                         return ctype(state=self.client._connection,
                                      guild=self.guild, data=channel)
                     value = await self._try_get(
@@ -297,8 +323,8 @@ class Context(discord.Object, _AsyncInit):
                     def resolve_role(role):
                         # monkeypatch for discord.py
                         role['permissions_new'] = role['permissions']
-                        return discord.Role(state=self.client._connection,
-                                            guild=self.guild, data=role)
+                        return PartialRole(state=self.client._connection,
+                                           guild=self.guild, data=role)
                     value = await self._try_get(
                         value, get_role, None, 'role', fng=False,
                         resolve_method=resolve_role, resolved=resolved)
