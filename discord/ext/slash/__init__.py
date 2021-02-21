@@ -59,6 +59,7 @@ from warnings import warn
 from enum import IntEnum
 from typing import Coroutine, Union, Optional, Mapping, Any, List
 from functools import partial
+from inspect import signature
 import logging
 import asyncio
 import discord
@@ -188,12 +189,12 @@ class Context(discord.Object, _AsyncInit):
     """
 
     id: int
-    guild: Union[discord.Guild, discord.Object]
+    guild: Union[discord.Guild, discord.Object, None]
     channel: Union[discord.TextChannel, discord.Object]
-    author: discord.Member
+    author: Optional[discord.Member]
     command: Union[Command, Group]
     options: Mapping[str, Any]
-    me: Optional[discord.Member]
+    me: Union[discord.Member, discord.Object]
     client: SlashBot
     webhook: Optional[discord.Webhook]
 
@@ -201,37 +202,39 @@ class Context(discord.Object, _AsyncInit):
         self.client = client
         self.command = cmd
         self.id = int(event['id'])
-        try:
-            self.guild = await self.client.fetch_guild(int(event['guild_id']))
-        except discord.HTTPException:
-            self.guild = discord.Object(event['guild_id'])
-            logger.debug('Fetching guild %s for interaction %s failed',
-                         self.guild.id, self.id)
-        try:
-            self.channel = await self.client.fetch_channel(int(event['channel_id']))
-        except discord.HTTPException:
-            self.channel = discord.Object(event['channel_id'])
-            logger.debug('Fetching channel %s for interaction %s failed',
-                         self.channel.id, self.id)
-        try:
-            self.author = await self.guild.fetch_member(int(event['member']['user']['id']))
-        except (discord.HTTPException, AttributeError):
-            self.author = discord.Member(
-                data=event['member'], guild=self.guild, state=self.client._connection)
-            logger.debug('Fetching member for interaction %s failed', self.id)
+        if event.get('guild_id', None):
+            self.guild = await self._try_get(
+                discord.Object(event['guild_id']), self.client.get_guild,
+                self.client.fetch_guild, 'guild')
+        else:
+            self.guild = None
+        self.channel = await self._try_get(
+            discord.Object(event['channel_id']), self.client.get_channel,
+            self.client.fetch_channel, 'channel')
+        if event.get('member', None):
+            author = discord.Member(
+                data=event['member'], guild=self.guild,
+                state=self.client._connection)
+            self.author = await self._try_get(
+                author, self._get_member,
+                self._fetch_member, 'author-member')
+        else:
+            self.author = None
         self.token = event['token']
         # construct options into function-friendly form
-        await self._kwargs_from_options(event['data'].get('options', []))
-        try:
-            self.me = await self.guild.fetch_member(self.client.user.id)
-        except (discord.HTTPException, AttributeError):
-            self.me = None
-            logger.debug('Fetching member %s (me) in guild %s '
-                         'for interaction %s failed',
-                         self.client.user.id, self.guild.id, self.id)
+        await self._kwargs_from_options(
+            event['data'].get('options', []),
+            event['data'].get('resolved', {
+                'members': {}, 'users': {},
+                'channels': {}, 'roles': {}
+            })
+        )
+        self.me = await self._try_get(
+            discord.Object(self.client.user.id), self._get_member,
+            self._fetch_member, 'me-member')
         self.webhook = None
 
-    async def _kwargs_from_options(self, options):
+    async def _kwargs_from_options(self, options, resolved):
         self.cog = self.command.cog
         kwargs = {}
         for opt in options:
@@ -245,37 +248,122 @@ class Context(discord.Object, _AsyncInit):
                     raise commands.CommandInvokeError(
                         f'No such option: {opt["name"]!r}')
                 opttype = self.command.options[opt['name']].type
+                value = discord.Object(value)
                 if opttype == ApplicationCommandOptionType.USER:
-                    try:
-                        value = await self.guild.fetch_member(int(value))
-                    except (discord.HTTPException, AttributeError):
-                        value = discord.Object(value)
-                        logger.debug('Fetching member %s for interaction %s failed',
-                                     value, self.id)
+                    def resolve_member(member):
+                        member['user'] = resolved['users'][str(value.id)]
+                        return discord.Member(
+                            data=member, guild=self.guild,
+                            state=self.client._connection)
+                    def resolve_user(user):
+                        return discord.User(
+                            state=self.client._connection, data=user)
+                    value = await self._try_get(
+                        value, self._get_member, self._fetch_member, 'member',
+                        resolve_method=resolve_member, resolved=resolved)
+                    if type(value) is discord.Object:
+                        value = await self._try_get(
+                            value, None, None, 'user', fq=False,
+                            resolve_method=resolve_user, resolved=resolved)
                 elif opttype == ApplicationCommandOptionType.CHANNEL:
-                    try:
-                        value = await self.client.fetch_channel(int(value))
-                    except (discord.HTTPException, AttributeError):
-                        value = discord.Object(value)
-                        logger.debug('Fetching channel %s for interaction %s failed',
-                                     value, self.id)
+                    def get_channel(oid):
+                        return self.guild.get_channel(oid)
+                    def resolve_channel(channel):
+                        # discord.py doesn't access this with a default,
+                        # but it seems like the resolved object doesn't
+                        # provide it either, so set it if not set.
+                        # Also can't use None here because position is
+                        # used as a sort key too.
+                        channel.setdefault('position', -1)
+                        ctype = channel['type']
+                        ctype, _ = discord.channel._channel_factory(ctype)
+                        return ctype(state=self.client._connection,
+                                     guild=self.guild, data=channel)
+                    value = await self._try_get(
+                        value, get_channel, self.client.fetch_channel, 'channel',
+                        resolve_method=resolve_channel, resolved=resolved)
                 elif opttype == ApplicationCommandOptionType.ROLE:
-                    value = self.guild.get_role(int(value))
-                    if value is None:
-                        value = discord.Object(value)
-                        logger.debug('Getting role %s for interaction %s failed',
-                                     value, self.id)
+                    def get_role(oid):
+                        return self.guild.get_role(oid)
+                    def resolve_role(role):
+                        # monkeypatch for discord.py
+                        role['permissions_new'] = role['permissions']
+                        return discord.Role(state=self.client._connection,
+                                            guild=self.guild, data=role)
+                    value = await self._try_get(
+                        value, get_role, None, 'role', fng=False,
+                        resolve_method=resolve_role, resolved=resolved)
                 kwargs[opt['name']] = value
             elif 'options' in opt:
                 self.command = self.command.slash[opt['name']]
-                await self._kwargs_from_options(opt['options'])
+                await self._kwargs_from_options(opt['options'], resolved)
                 return
         if isinstance(self.command, Group):
             self.command = self.command.slash[opt['name']]
-            await self._kwargs_from_options(opt.get('options', []))
+            await self._kwargs_from_options(opt.get('options', []), resolved)
         elif isinstance(self.command, Command):
             kwargs[self.command._ctx_arg] = self
             self.options = kwargs
+
+    async def _try_get(
+        self, default, get_method, fetch_method, typename, *,
+        resolve_method=None, resolved=None, fng=None, fq=None
+    ):
+        fq = (not self.client.resolve_not_fetch) if fq is None else fq
+        fng = self.client.fetch_if_not_get if fng is None else fng
+        if fq:
+            try:
+                obj = get_method(default.id)
+                if obj is None and fng:
+                    logger.debug(
+                        'Getting %s %s for interaction %s failed, '
+                        'falling back to fetching',
+                        typename, default.id, self.id)
+                    obj = await fetch_method(default.id)
+                elif not fng:
+                    raise ValueError
+                else:
+                    logger.debug(
+                        'Got %s %s for interaction %s',
+                        typename, obj.id, self.id)
+                    return obj
+            except discord.HTTPException:
+                logger.debug(
+                    'Fetching %s %s for interaction %s failed%s',
+                    typename, default.id, self.id,
+                    ', falling back to resolving'
+                    if resolved
+                    else ', falling back on default')
+            except (AttributeError, ValueError):
+                logger.debug(
+                    'Getting %s %s for interaction %s failed%s',
+                    typename, default.id, self.id,
+                    ', falling back to resolving'
+                    if resolved
+                    else ', falling back on default')
+            else:
+                logger.debug(
+                    'Fetched %s %s for interaction %s',
+                    typename, obj.id, self.id)
+                return obj
+        if resolved is None:
+            return default
+        obj = resolved[typename+'s'].get(str(default.id), None)
+        if obj is None:
+            logger.debug(
+                'Resolving %s %s for interaction %s failed',
+                typename, default.id, self.id)
+            return default
+        logger.debug(
+            'Resolved %s %s for interaction %s',
+            typename, default.id, self.id)
+        return resolve_method(obj)
+
+    def _get_member(self, mid):
+        return self.guild.get_member(mid)
+
+    async def _fetch_member(self, mid):
+        return await self.guild.fetch_member(mid)
 
     def __repr__(self):
         return f'<Interaction id={self.id}>'
@@ -504,24 +592,35 @@ class Command:
         self.parent = kwargs.pop('parent', None)
         self._ctx_arg = None
         self.options = {}
-        for arg, typ in coro.__annotations__.items():
+        for param in signature(coro).parameters.values():
+            typ = param.annotation
             if isinstance(typ, str):
                 try:
                     # evaluate the annotation in its module's context
                     globs = sys.modules[coro.__module__].__dict__
-                    coro.__annotations__[arg] = typ = eval(typ, globs)
-                except SyntaxError:
-                    continue
+                    typ = eval(typ, globs)
+                except:
+                    typ = param.empty
+            if (
+                not (isinstance(typ, Option) or (
+                    isinstance(typ, type) and issubclass(typ, Context)
+                ))
+                and param.default is param.empty
+            ):
+                raise TypeError(f'Command {self.name!r} cannot have a '
+                                'required argument with no valid annotation')
             try:
                 if issubclass(typ, Context):
-                    self._ctx_arg = arg
+                    self._ctx_arg = param.name
             except TypeError: # not even a class
                 pass
             if isinstance(typ, Option):
                 typ = typ.clone()
-                self.options[arg] = typ
+                if param.default is param.empty:
+                    typ.required = True
+                self.options[param.name] = typ
                 if typ.name is None:
-                    typ.name = arg
+                    typ.name = param.name
         if self._ctx_arg is None:
             raise ValueError('One argument must be type-hinted slash.Context')
         self.coro = coro
@@ -711,6 +810,8 @@ class SlashBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.debug_guild = int(kwargs.pop('debug_guild', 0) or 0) or None
+        self.resolve_not_fetch = bool(kwargs.pop('resolve_not_fetch', True))
+        self.fetch_if_not_get = bool(kwargs.pop('fetch_if_not_get', False))
         self.slash = set()
         @self.listen()
         async def on_ready():

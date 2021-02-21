@@ -6,7 +6,8 @@ from discord.ext import slash
 client = slash.SlashBot(
     # Pass help_command=None if the bot only uses slash commands
     command_prefix='/', description='', help_command=None,
-    debug_guild=int(os.environ.get('DISCORD_DEBUG_GUILD', 0)) or None
+    debug_guild=int(os.environ.get('DISCORD_DEBUG_GUILD', 0)) or None,
+    resolve_not_fetch=False, fetch_if_not_get=True
 )
 
 @client.slash_cmd()
@@ -50,6 +51,21 @@ async def repeat(ctx: slash.Context, message: msg_opt):
     await ctx.respond(message, allowed_mentions=discord.AllowedMentions.none(),
                       # sends a message, showing command invocation
                       rtype=slash.InteractionResponseType.ChannelMessageWithSource)
+
+@client.slash_cmd(name='names')
+async def names(
+    ctx: slash.Context,
+    channel: slash.Option(description='A channel',
+                          type=slash.ApplicationCommandOptionType.CHANNEL),
+    user: slash.Option(description='A user',
+                       type=slash.ApplicationCommandOptionType.USER),
+    role: slash.Option(description='A role',
+                       type=slash.ApplicationCommandOptionType.ROLE)
+):
+    """Return a combination of IDs, somehow."""
+    await ctx.respond(f'```{channel.name!r} {user.name!r} {role.name!r}```',
+                      flags=slash.MessageFlags.EPHEMERAL,
+                      rtype=slash.InteractionResponseType.ChannelMessage)
 
 @client.slash_cmd()
 async def stop(ctx: slash.Context):
