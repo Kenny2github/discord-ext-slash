@@ -211,7 +211,7 @@ class Context(discord.Object, _AsyncInit):
     id: int
     guild: Union[discord.Guild, discord.Object, None]
     channel: Union[discord.TextChannel, discord.Object]
-    author: Optional[discord.Member]
+    author: Union[discord.Member, PartialMember, None]
     command: Union[Command, Group]
     options: Mapping[str, Any]
     me: Union[discord.Member, discord.Object]
