@@ -14,7 +14,7 @@ client = slash.SlashBot(
 async def hello(ctx: slash.Context):
     """Hello World!"""
     await ctx.respond('Hello World!', flags=slash.MessageFlags.EPHEMERAL,
-                      rtype=slash.InteractionResponseType.ChannelMessage)
+                      rtype=slash.InteractionResponseType.ChannelMessageWithSource)
 
 @client.slash_group()
 async def say(ctx: slash.Context):
@@ -65,12 +65,13 @@ async def names(
     """Return a combination of IDs, somehow."""
     await ctx.respond(f'```{channel.name!r} {user.name!r} {role.name!r}```',
                       flags=slash.MessageFlags.EPHEMERAL,
-                      rtype=slash.InteractionResponseType.ChannelMessage)
+                      rtype=slash.InteractionResponseType.ChannelMessageWithSource)
 
 @client.slash_cmd()
 async def stop(ctx: slash.Context):
     """Stop the bot."""
-    await ctx.respond(rtype=slash.InteractionResponseType.Acknowledge)
+    await ctx.respond('Goodbye', flags=slash.MessageFlags.EPHEMERAL,
+                      rtype=slash.InteractionResponseType.ChannelMessageWithSource)
     await client.close()
 
 @stop.check

@@ -32,11 +32,11 @@ Example Usage
         ctx: slash.Context, # there MUST be one argument annotated with Context
         message: msg_opt
     ):
-        """Send a message in the bot's name""" # description of command
+        """Make the bot repeat what you say""" # description of command
         # respond to the interaction, must be done within 3 seconds
         await ctx.respond(message, # string (or str()able) message
-            # sends a message without showing the command invocation
-            rtype=slash.InteractionResponseType.ChannelMessage)
+            # sends a response message immediately
+            rtype=slash.InteractionResponseType.ChannelMessageWithSource)
 
     client.run(token)
 

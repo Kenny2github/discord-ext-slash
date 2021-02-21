@@ -32,11 +32,11 @@ Example Usage
         ctx: slash.Context, # there MUST be one argument annotated with Context
         message: msg_opt
     ):
-        """Send a message in the bot's name""" # description of command
+        """Make the bot repeat what you say""" # description of command
         # respond to the interaction, must be done within 3 seconds
         await ctx.respond(message, # string (or str()able) message
-            # sends a message without showing the command invocation
-            rtype=slash.InteractionResponseType.ChannelMessage)
+            # sends a response message immediately
+            rtype=slash.InteractionResponseType.ChannelMessageWithSource)
 
     client.run(token)
 
@@ -106,31 +106,35 @@ class InteractionResponseType(IntEnum):
         Included only for completeness
     .. attribute:: Acknowledge
 
-        ACK a command without sending a message and without showing user input.
-        Probably best used for debugging commands.
+        Pending deprecation on the API
     .. attribute:: ChannelMessage
 
-        Respond with a message, but don't show user input.
-        Probably best suited for admin commands,
-        or commands with ephemeral responses.
+        Pending deprecation on the API
     .. attribute:: ChannelMessageWithSource
 
         Show user input and send a message. Default.
-    .. attribute:: AcknowledgeWithSource
+    .. attribute:: DeferredChannelMessageWithSource
 
-        Show user input and do nothing else.
-        Probably best suited for regular commands that require no response.
+        Show user input and display a "waiting for bot" system message.
+        Send a response with this type and edit the response later if you
+        need to do some asynchronous fetch or something.
     """
     # ACK a Ping
     Pong = 1
     # ACK a command without sending a message, eating the user's input
+    # DEPRECATED - future UI will show the command message like a reply,
+    # so there will be no way to "[eat] the user's input"
     Acknowledge = 2
     # respond with a message, eating the user's input
+    # DEPRECATED - same as Acknowledge
     ChannelMessage = 3
-    # respond with a message, showing the user's input
+    # Respond immediately to an interaction
     ChannelMessageWithSource = 4
+    # ACK an interaction and send a response later
+    DeferredChannelMessageWithSource = 5
     # ACK a command without sending a message, showing the user's input
-    AcknowledgeWithSource = 5
+    # (Former name and description, now renamed)
+    AcknowledgeWithSource = DeferredChannelMessageWithSource
 
 class MessageFlags(IntEnum):
     """Flags to pass to the ``flags`` argument of the interaction response.
@@ -426,6 +430,13 @@ class Context(discord.Object, _AsyncInit):
         rtype: :class:`InteractionResponseType`
             The type of response to send. See that class's documentation.
         """
+        if rtype in {
+            InteractionResponseType.Acknowledge,
+            InteractionResponseType.ChannelMessage,
+        }:
+            warn(f'{rtype!r} will be deprecated soon, see: '
+                 'https://github.com/discord/discord-api-docs/pull/2615',
+                 PendingDeprecationWarning)
         content = str(content)
         if embed and embeds:
             raise TypeError('Cannot specify both embed and embeds')
@@ -456,15 +467,14 @@ class Context(discord.Object, _AsyncInit):
             }
             if content or embeds:
                 data['data'] = {'content': content}
-            elif rtype in {InteractionResponseType.ChannelMessage,
-                        InteractionResponseType.ChannelMessageWithSource}:
+            elif rtype == InteractionResponseType.ChannelMessageWithSource:
                 raise ValueError('sending channel message with no content')
             if embeds:
                 data['data']['embeds'] = embeds
             if mentions is not None:
                 data['data']['allowed_mentions'] = mentions.to_dict()
-            if flags and 'data' in data:
-                data['data']['flags'] = int(flags)
+            if flags:
+                data.setdefault('data', {})['flags'] = int(flags)
             path = f"/interactions/{self.id}/{self.token}/callback"
             route = _Route('POST', path, channel_id=self.channel.id,
                            guild_id=self.guild.id)
