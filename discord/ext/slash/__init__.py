@@ -248,7 +248,16 @@ class Context(discord.Object, _AsyncInit):
                     raise commands.CommandInvokeError(
                         f'No such option: {opt["name"]!r}')
                 opttype = self.command.options[opt['name']].type
-                value = discord.Object(value)
+                try:
+                    opttype = ApplicationCommandOptionType(opttype)
+                except ValueError:
+                    pass # just use the new int
+                if opttype in {
+                    ApplicationCommandOptionType.USER,
+                    ApplicationCommandOptionType.CHANNEL,
+                    ApplicationCommandOptionType.ROLE,
+                }:
+                    value = discord.Object(value)
                 if opttype == ApplicationCommandOptionType.USER:
                     def resolve_member(member):
                         member['user'] = resolved['users'][str(value.id)]
