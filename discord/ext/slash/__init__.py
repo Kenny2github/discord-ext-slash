@@ -554,7 +554,7 @@ class Choice:
     def to_dict(self):
         return {'name': self.name, 'value': self.value}
 
-class Command:
+class Command(discord.Object):
     """Represents a slash command.
 
     Attributes
