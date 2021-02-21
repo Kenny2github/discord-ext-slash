@@ -346,7 +346,9 @@ class Context(discord.Object, _AsyncInit):
     ):
         fq = (not self.client.resolve_not_fetch) if fq is None else fq
         fng = self.client.fetch_if_not_get if fng is None else fng
-        if fq:
+        # always try to get *something*
+        if fq or resolved is None \
+                or str(default.id) not in resolved[typename+'s']:
             try:
                 obj = get_method(default.id)
                 if obj is None and fng:
