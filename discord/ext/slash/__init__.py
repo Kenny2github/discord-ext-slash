@@ -106,10 +106,10 @@ class InteractionResponseType(IntEnum):
         Included only for completeness
     .. attribute:: Acknowledge
 
-        Pending deprecation on the API
+        Deprecated
     .. attribute:: ChannelMessage
 
-        Pending deprecation on the API
+        Deprecated
     .. attribute:: ChannelMessageWithSource
 
         Show user input and send a message. Default.
@@ -122,8 +122,8 @@ class InteractionResponseType(IntEnum):
     # ACK a Ping
     Pong = 1
     # ACK a command without sending a message, eating the user's input
-    # DEPRECATED - future UI will show the command message like a reply,
-    # so there will be no way to "[eat] the user's input"
+    # DEPRECATED - UI shows command like a reply,
+    # so there is no way to "[eat] the user's input"
     Acknowledge = 2
     # respond with a message, eating the user's input
     # DEPRECATED - same as Acknowledge
@@ -434,9 +434,9 @@ class Context(discord.Object, _AsyncInit):
             InteractionResponseType.Acknowledge,
             InteractionResponseType.ChannelMessage,
         }:
-            warn(f'{rtype!r} will be deprecated soon, see: '
+            warn(f'{rtype!r} is deprecated, see: '
                  'https://github.com/discord/discord-api-docs/pull/2615',
-                 PendingDeprecationWarning)
+                 DeprecationWarning)
         content = str(content)
         if embed and embeds:
             raise TypeError('Cannot specify both embed and embeds')

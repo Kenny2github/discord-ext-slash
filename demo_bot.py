@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 import discord
 from discord.ext import slash
 
@@ -38,23 +39,49 @@ emote_opt = slash.Option(
 @say.slash_cmd()
 async def emote(ctx: slash.Context, choice: emote_opt):
     """Send a premade message."""
-    await ctx.respond(choice, allowed_mentions=discord.AllowedMentions.none(),
-                      # sends a message without showing the command invocation
-                      rtype=slash.InteractionResponseType.ChannelMessageWithSource)
+    # By default, this sends a message and shows
+    # the command invocation in a reply-like UI
+    await ctx.respond(choice, allowed_mentions=discord.AllowedMentions.none())
 
 msg_opt = slash.Option(
+    # By default, options are string options
     description='Message to send', required=True)
+eph_opt = slash.Option(
+    description='Whether to send it ephemerally',
+    # but they can be a bunch of other things
+    type=slash.ApplicationCommandOptionType.BOOLEAN)
 
 @say.slash_cmd()
-async def repeat(ctx: slash.Context, message: msg_opt):
+async def repeat(ctx: slash.Context, message: msg_opt, ephemeral: eph_opt = False):
     """Make the bot repeat your message."""
     await ctx.respond(message, allowed_mentions=discord.AllowedMentions.none(),
-                      # sends a message, showing command invocation
-                      rtype=slash.InteractionResponseType.ChannelMessageWithSource)
+                      # Setting this will make the message only visible to the invoker
+                      flags=slash.MessageFlags.EPHEMERAL if ephemeral else 0)
+
+delay_opt = slash.Option(
+    description='How long to wait first',
+    type=slash.ApplicationCommandOptionType.INTEGER)
+
+@say.slash_cmd()
+async def wait(ctx: slash.Context, message: msg_opt, delay: delay_opt = 5):
+    """Make the bot wait a bit before repeating your message."""
+    # sends a "Bot is thinking..." response - if there is long processing to do,
+    # send this first and make the actual response later
+    await ctx.respond(rtype=slash.InteractionResponseType.DeferredChannelMessageWithSource)
+    await asyncio.sleep(delay)
+    # make the actual response with a second respond() call (not send or webhook.send!)
+    # further respond() calls after *this* one will edit the message
+    await ctx.respond(message, allowed_mentions=discord.AllowedMentions.none())
+    await asyncio.sleep(delay)
+    # further messages after the response must be sent through the webhook
+    await ctx.webhook.send('An extra message')
 
 @client.slash_cmd(name='names')
 async def names(
     ctx: slash.Context,
+    # You can have Discord models as options too
+    # They will have a good amount of information
+    # even if the bot user is not in the guild
     channel: slash.Option(description='A channel',
                           type=slash.ApplicationCommandOptionType.CHANNEL),
     user: slash.Option(description='A user',
@@ -62,7 +89,7 @@ async def names(
     role: slash.Option(description='A role',
                        type=slash.ApplicationCommandOptionType.ROLE)
 ):
-    """Return a combination of IDs, somehow."""
+    """Return a combination of names, somehow."""
     await ctx.respond(f'```{channel.name!r} {user.name!r} {role.name!r}```',
                       flags=slash.MessageFlags.EPHEMERAL,
                       rtype=slash.InteractionResponseType.ChannelMessageWithSource)
