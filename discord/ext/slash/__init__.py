@@ -639,6 +639,7 @@ class Command(discord.Object):
         self.parent = kwargs.pop('parent', None)
         self._ctx_arg = None
         self.options = {}
+        found_self_arg = False
         for param in signature(coro).parameters.values():
             typ = param.annotation
             if isinstance(typ, str):
@@ -654,8 +655,15 @@ class Command(discord.Object):
                 ))
                 and param.default is param.empty
             ):
-                raise TypeError(f'Command {self.name!r} cannot have a '
-                                'required argument with no valid annotation')
+                if not found_self_arg:
+                    # assume that the first required non-annotated argument
+                    # is the self argument to a class' method
+                    found_self_arg = True
+                    continue
+                else:
+                    raise TypeError(
+                        f'Command {self.name!r} cannot have a '
+                        'required argument with no valid annotation')
             try:
                 if issubclass(typ, Context):
                     self._ctx_arg = param.name
