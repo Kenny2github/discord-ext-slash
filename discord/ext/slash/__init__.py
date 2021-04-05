@@ -81,7 +81,7 @@ __all__ = [
     'SlashBot'
 ]
 
-__version__ = '0.5.0'
+__version__ = '0.5.1'
 
 class SlashWarning(UserWarning):
     """Watch out, this may cause problems down the line."""
