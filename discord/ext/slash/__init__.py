@@ -222,6 +222,16 @@ class Context(discord.Object, _AsyncInit):
     client: SlashBot
     webhook: Optional[discord.Webhook]
 
+    @property
+    def bot(self) -> SlashBot:
+        """The bot. Alias for self.client."""
+        return self.client
+
+    @bot.setter
+    def bot(self, value: SlashBot):
+        """The bot. Alias for self.client."""
+        self.client = value
+
     async def __init__(self, client: SlashBot, cmd: Command, event: dict):
         self.client = client
         self.command = cmd
