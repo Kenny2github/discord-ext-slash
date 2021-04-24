@@ -668,7 +668,7 @@ class Command(discord.Object):
         self.description = kwargs.pop('description', coro.__doc__)
         if not self.description:
             raise ValueError(f'Please specify a description for {self.name!r}')
-        self.guild_id = kwargs.pop('guild', None)
+        self.guild_id = kwargs.pop('guild_id', kwargs.pop('guild', None))
         if self.guild_id is not None:
             self.guild_id = int(self.guild_id)
         self.parent = kwargs.pop('parent', None)
