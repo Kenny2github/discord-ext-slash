@@ -421,7 +421,8 @@ class Context(discord.Object, _AsyncInit):
 
     async def respond(
         self, content='', *, embed=None, embeds=None, allowed_mentions=None,
-        flags=None, rtype=InteractionResponseType.ChannelMessageWithSource
+        file=None, ephemeral=False, deferred=False, flags=None,
+        rtype=InteractionResponseType.ChannelMessageWithSource
     ):
         """Respond to the interaction. If called again, edits the response.
 
@@ -435,11 +436,21 @@ class Context(discord.Object, _AsyncInit):
             Up to 10 embeds (any more will be silently discarded)
         allowed_mentions: :class:`discord.AllowedMentions`
             Mirrors normal ``allowed_mentions`` in Messageable.send
+        file: :class:`discord.File`
+            Mirrors normal ``file`` in Messageable.send
+        ephemeral: :class:`bool`
+            Shortcut to setting ``flags=MessageFlags.EPHEMERAL``.
+            If other flags are present, they are preserved.
+        deferred: :class:`bool`
+            Shortcut to setting ``rtype=DeferredChannelMessageWithSource``.
+            Overrides ``rtype`` unconditionally if ``True``.
         flags: Union[int, :class:`MessageFlags`]
             Message flags, ORed together
         rtype: :class:`InteractionResponseType`
             The type of response to send. See that class's documentation.
         """
+        if deferred:
+            rtype = InteractionResponseType.DeferredChannelMessageWithSource
         if rtype in {
             InteractionResponseType.Acknowledge,
             InteractionResponseType.ChannelMessage,
@@ -483,6 +494,8 @@ class Context(discord.Object, _AsyncInit):
                 data['data']['embeds'] = embeds
             if mentions is not None:
                 data['data']['allowed_mentions'] = mentions.to_dict()
+            if ephemeral:
+                flags = (flags or 0) | MessageFlags.EPHEMERAL
             if flags:
                 data.setdefault('data', {})['flags'] = int(flags)
             path = f"/interactions/{self.id}/{self.token}/callback"
@@ -491,7 +504,19 @@ class Context(discord.Object, _AsyncInit):
             self.webhook = discord.Webhook.partial(
                 id=self.client.app_info.id, token=self.token, adapter=
                 discord.AsyncWebhookAdapter(self.client.http._HTTPClient__session))
-        await self.client.http.request(route, json=data)
+        if isinstance(file, discord.File):
+            form = []
+            form.append({'name': 'payload_json',
+                         'value': discord.utils.to_json(data)})
+            form.append({
+                'name': 'file',
+                'value': file.fp,
+                'filename': file.filename,
+                'content_type': 'application/octet-stream'
+            })
+            await self.client.http.request(route, form=form, files=[file])
+        else:
+            await self.client.http.request(route, json=data)
 
     async def delete(self):
         """Delete the original interaction response message."""
