@@ -14,8 +14,7 @@ client = slash.SlashBot(
 @client.slash_cmd()
 async def hello(ctx: slash.Context):
     """Hello World!"""
-    await ctx.respond('Hello World!', flags=slash.MessageFlags.EPHEMERAL,
-                      rtype=slash.InteractionResponseType.ChannelMessageWithSource)
+    await ctx.respond('Hello World!', ephemeral=True)
 
 @client.slash_group()
 async def say(ctx: slash.Context):
@@ -56,7 +55,7 @@ async def repeat(ctx: slash.Context, message: msg_opt, ephemeral: eph_opt = Fals
     """Make the bot repeat your message."""
     await ctx.respond(message, allowed_mentions=discord.AllowedMentions.none(),
                       # Setting this will make the message only visible to the invoker
-                      flags=slash.MessageFlags.EPHEMERAL if ephemeral else 0)
+                      ephemeral=ephemeral)
 
 delay_opt = slash.Option(
     description='How long to wait first',
@@ -67,7 +66,7 @@ async def wait(ctx: slash.Context, message: msg_opt, delay: delay_opt = 5):
     """Make the bot wait a bit before repeating your message."""
     # sends a "Bot is thinking..." response - if there is long processing to do,
     # send this first and make the actual response later
-    await ctx.respond(rtype=slash.InteractionResponseType.DeferredChannelMessageWithSource)
+    await ctx.respond(deferred=True)
     await asyncio.sleep(delay)
     # make the actual response with a second respond() call (not send or webhook.send!)
     # further respond() calls after *this* one will edit the message
@@ -91,14 +90,12 @@ async def names(
 ):
     """Return a combination of names, somehow."""
     await ctx.respond(f'```{channel.name!r} {user.name!r} {role.name!r}```',
-                      flags=slash.MessageFlags.EPHEMERAL,
-                      rtype=slash.InteractionResponseType.ChannelMessageWithSource)
+                      ephemeral=True)
 
 @client.slash_cmd()
 async def stop(ctx: slash.Context):
     """Stop the bot."""
-    await ctx.respond('Goodbye', flags=slash.MessageFlags.EPHEMERAL,
-                      rtype=slash.InteractionResponseType.ChannelMessageWithSource)
+    await ctx.respond('Goodbye', ephemeral=True)
     await client.close()
 
 @stop.check
