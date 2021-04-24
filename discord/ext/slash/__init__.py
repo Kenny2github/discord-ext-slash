@@ -967,10 +967,11 @@ class SlashBot(commands.Bot):
                  f'by ID {event["data"]["id"]}, falling back to '
                  'name + guild search', SlashWarning)
             cmd = discord.utils.get(
-                self.slash, name=event['data']['name'], guild_id=event['guild_id'])
+                self.slash, name=event['data']['name'],
+                guild_id=int(event['guild_id'] or 0) or None)
         if cmd is None:
             warn(f'No command {event["data"]["name"]!r} found '
-                 f'by name and guild ID {event["guild_id"]}, '
+                 f'by name and guild ID {event["guild_id"]!r}, '
                  'falling back to name-only search', SlashWarning)
             cmd = discord.utils.get(
                 self.slash, name=event['data']['name'])
