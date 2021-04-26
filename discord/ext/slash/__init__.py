@@ -761,6 +761,7 @@ class Command(discord.Object):
         Can be used as a decorator.
         """
         self._check = coro
+        return coro
 
     async def can_run(self, ctx):
         parents = []  # highest level parent last
@@ -991,13 +992,20 @@ class SlashBot(commands.Bot):
             except commands.CommandInvokeError as exc2:
                 self.dispatch('command_error', ctx, exc2)
 
-    async def register_commands(self):
+    async def register_commands(self, guild_id: int = None):
+        """Update commands on the API.
+
+        guild_id: :class:`int`
+            Only update commands specific to this guild.
+        """
         app_info = await self.application_info()
         global_path = f"/applications/{app_info.id}/commands"
         guild_path = f"/applications/{app_info.id}/guilds/{{0}}/commands"
         guilds = {}
         for cmd in self.slash:
             cmd.guild_id = cmd.guild_id or self.debug_guild
+            if guild_id and cmd.guild_id != guild_id:
+                continue
             guilds.setdefault(cmd.guild_id, {})[cmd.name] = cmd
         state = {
             'POST': {},
