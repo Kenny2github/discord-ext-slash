@@ -34,9 +34,7 @@ Example Usage
     ):
         """Make the bot repeat what you say""" # description of command
         # respond to the interaction, must be done within 3 seconds
-        await ctx.respond(message, # string (or str()able) message
-            # sends a response message immediately
-            rtype=slash.InteractionResponseType.ChannelMessageWithSource)
+        await ctx.respond(message) # string (or str()able) message
 
     client.run(token)
 
