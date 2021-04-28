@@ -999,7 +999,7 @@ class SlashBot(commands.Bot):
         app_info = await self.application_info()
         global_path = f"/applications/{app_info.id}/commands"
         guild_path = f"/applications/{app_info.id}/guilds/{{0}}/commands"
-        guilds = {}
+        guilds = {g.id: {} for g in self.guilds}
         for cmd in self.slash:
             cmd.guild_id = cmd.guild_id or self.debug_guild
             if guild_id and cmd.guild_id != guild_id:
