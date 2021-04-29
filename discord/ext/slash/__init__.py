@@ -463,6 +463,8 @@ class Context(discord.Object, _AsyncInit):
             embeds = [embed]
         if embeds:
             embeds = [emb.to_dict() for emb, _ in zip(embeds, range(10))]
+        if embeds and ephemeral:
+            raise TypeError('Ephemeral messages do not currently support embeds. See: https://github.com/discord/discord-api-docs/issues/2318')
         mentions = self.client.allowed_mentions
         if mentions is not None and allowed_mentions is not None:
             mentions = mentions.merge(allowed_mentions)
