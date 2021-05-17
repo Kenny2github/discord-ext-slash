@@ -89,8 +89,11 @@ async def names(
                        type=slash.ApplicationCommandOptionType.ROLE)
 ):
     """Return a combination of names, somehow."""
-    await ctx.respond(f'```{channel.name!r} {user.name!r} {role.name!r}```',
-                      ephemeral=True)
+    emb = discord.Embed()
+    emb.add_field(name='Channel Name', value=channel.name)
+    emb.add_field(name='User Name', value=user.name)
+    emb.add_field(name='Role Name', value=role.name)
+    await ctx.respond(embed=emb, ephemeral=True)
 
 @client.slash_cmd()
 async def stop(ctx: slash.Context):

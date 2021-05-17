@@ -55,7 +55,7 @@ from __future__ import annotations
 import sys
 from warnings import warn
 from enum import IntEnum
-from typing import Coroutine, Union, Optional, Mapping, Any, List
+from typing import Coroutine, Dict, Set, Tuple, Union, Optional, Mapping, Any, List
 from functools import partial
 from inspect import signature
 import logging
@@ -162,6 +162,7 @@ class PartialObject(discord.Object):
     """Subclasses of this have their .guild as a discord.Object,
     so their guild-related functionality may break.
     """
+    guild: discord.Object
 
 class PartialTextChannel(discord.TextChannel, PartialObject):
     pass
@@ -729,6 +730,11 @@ class Command(discord.Object):
     def __hash__(self):
         return hash((self.name, self.guild_id))
 
+    def _to_dict_common(self, data: dict):
+        # TODO: the API doesn't support this yet, so it is disabled for now.
+        if self.parent is not None and False:
+            data['default'] = self.default
+
     def to_dict(self):
         data = {
             'name': self.name,
@@ -736,9 +742,7 @@ class Command(discord.Object):
         }
         if self.options:
             data['options'] = [opt.to_dict() for opt in self.options.values()]
-        # TODO: the API doesn't support this yet, so it is disabled for now.
-        if self.parent is not None and False:
-            data['default'] = self.default
+        self._to_dict_common(data)
         return data
 
     async def invoke(self, ctx):
@@ -873,9 +877,7 @@ class Group(Command):
                 else:
                     raise ValueError(f'What is a {type(sub).__name__} doing here?')
                 data['options'].append(ddict)
-        # TODO: the API doesn't support this yet, so it is disabled for now.
-        if self.parent is not None and False:
-            data['default'] = self.default
+        self._to_dict_common(data)
         return data
 
 def cmd(**kwargs):
@@ -895,6 +897,8 @@ logger.setLevel(logging.INFO)
 
 class SlashBot(commands.Bot):
     """A bot that supports slash commands."""
+
+    slash: Set[Command]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
