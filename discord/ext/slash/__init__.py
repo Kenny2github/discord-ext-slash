@@ -66,12 +66,14 @@ from discord.ext import commands
 __all__ = [
     'SlashWarning',
     'ApplicationCommandOptionType',
+    'ApplicationCommandPermissionType',
     'InteractionResponseType',
     'MessageFlags',
     'Context',
     'Interaction',
     'Option',
     'Choice',
+    'CommandPermissionsDict',
     'Command',
     'Group',
     'cmd',
@@ -94,6 +96,11 @@ class ApplicationCommandOptionType(IntEnum):
     USER = 6
     CHANNEL = 7
     ROLE = 8
+
+class ApplicationCommandPermissionType(IntEnum):
+    """Possible types of permission grants."""
+    ROLE = 1
+    USER = 2
 
 class InteractionResponseType(IntEnum):
     """Possible ways to respond to an interaction.
@@ -626,6 +633,9 @@ class Choice:
     def to_dict(self):
         return {'name': self.name, 'value': self.value}
 
+CommandPermissionsDict = Dict[Optional[int], Dict[Tuple[
+    int, ApplicationCommandPermissionType], bool]]
+
 class Command(discord.Object):
     """Represents a slash command.
 
@@ -644,9 +654,17 @@ class Command(discord.Object):
         If present, this command only exists in this guild.
     parent: Optional[:class:`Group`]
         Parent (sub)command group.
+    default_permission: :class:`bool`
+        If ``False`` (default ``True``), this command is disabled by default
+        when the bot is added to a new guild. It must be re-enabled per user
+        or role using permissions.
     options: Mapping[:class:`str`, :class:`Option`]
         Options for this command. Not passable as a parameter;
         can only be set by inspecting the function annotations.
+    permissions: :class:`CommandPermissionsDict`
+        Permission overrides for this command. A dict of guild IDs to dicts of:
+        role or user or member objects (partial or real) to boolean
+        enable/disable values to grant/deny permissions.
     default: :class:`bool`
         If ``True``, invoking the base parent of this command translates
         into invoking this subcommand. (Not settable in arguments.)
@@ -660,6 +678,8 @@ class Command(discord.Object):
     parent: Optional[Group]
     options: Mapping[str, Option]
     default: bool = False
+    default_permission: bool = True
+    permissions: CommandPermissionsDict
 
     def __init__(self, coro: Coroutine, **kwargs):
         self.id = None
@@ -671,6 +691,8 @@ class Command(discord.Object):
         if self.guild_id is not None:
             self.guild_id = int(self.guild_id)
         self.parent = kwargs.pop('parent', None)
+        self.default_permission = kwargs.pop('default_permission', True)
+        self.permissions = {}
         self._ctx_arg = None
         self.options = {}
         found_self_arg = False
@@ -734,6 +756,8 @@ class Command(discord.Object):
         # TODO: the API doesn't support this yet, so it is disabled for now.
         if self.parent is not None and False:
             data['default'] = self.default
+        if self.parent is None:
+            data['default_permission'] = self.default_permission
 
     def to_dict(self):
         data = {
@@ -744,6 +768,43 @@ class Command(discord.Object):
             data['options'] = [opt.to_dict() for opt in self.options.values()]
         self._to_dict_common(data)
         return data
+
+    def perms_dict(self, guild_id: Optional[int]):
+        perms = []
+        final = self.permissions.get(None, {}).copy()
+        final.update(self.permissions.get(guild_id, {}).items())
+        for (oid, type), perm in final.items():
+            perms.append({
+                'id': oid,
+                'type': type.value,
+                'permission': perm
+            })
+        return {'id': self.id, 'permissions': perms}
+
+    def add_perm(
+        self, target: Union[discord.Role, discord.abc.User, discord.Object],
+        perm: bool, guild_id: Optional[int] = ...,
+        type: ApplicationCommandPermissionType = None
+    ):
+        """Add a permission override.
+        ``guild_id`` overrides target.guild.id, if specified. If specified to
+        be None, this sets permissions for all guilds.
+        """
+        if type is None:
+            if isinstance(target, discord.Role):
+                type = ApplicationCommandPermissionType.ROLE
+            elif isinstance(target, discord.abc.User):
+                type = ApplicationCommandPermissionType.USER
+            else:
+                raise ValueError(
+                    'Must specify type if target is not a discord.py model')
+        if guild_id is ...:
+            if isinstance(target, (discord.Role, discord.Member)):
+                guild_id = target.guild.id
+            else:
+                raise ValueError(
+                    'Must specify guild_id if target is not a guilded object')
+        self.permissions.setdefault(guild_id, {})[target.id, type] = perm
 
     async def invoke(self, ctx):
         if not await self.can_run(ctx):
@@ -892,6 +953,17 @@ def group(**kwargs):
         return Group(func, **kwargs)
     return decorator
 
+def permit(
+    target: Union[discord.Role, discord.abc.User, discord.Object],
+    perm: bool, guild_id: Optional[int] = ...,
+    type: ApplicationCommandPermissionType = None
+):
+    """Decorator **on top of a command** that adds a permissions overwrite."""
+    def decorator(func: Command):
+        func.add_perm(target, perm, guild_id, type)
+        return func
+    return decorator
+
 logger = logging.getLogger('discord.ext.slash')
 logger.setLevel(logging.INFO)
 
@@ -914,6 +986,7 @@ class SlashBot(commands.Bot):
                 self._connection.dispatch('interaction_create', data)))
             try:
                 await self.register_commands()
+                self._connection.dispatch('slash_permissions')
             except discord.HTTPException:
                 logger.exception('Registering commands failed')
                 asyncio.create_task(self.close())
@@ -994,6 +1067,9 @@ class SlashBot(commands.Bot):
             except commands.CommandInvokeError as exc2:
                 self.dispatch('command_error', ctx, exc2)
 
+    async def on_slash_permissions(self):
+        await self.register_permissions()
+
     async def register_commands(self, guild_id: int = None):
         """Update commands on the API.
 
@@ -1025,6 +1101,7 @@ class SlashBot(commands.Bot):
             guild_cmds = await self.http.request(route)
             await self.sync_cmds(state, guild, guild_cmds, guild_id)
         del guilds
+        tasks: List[asyncio.Task] = []
         for method, guilds in state.items():
             for guild_id, guild in guilds.items():
                 for name, kwargs in guild.items():
@@ -1035,8 +1112,10 @@ class SlashBot(commands.Bot):
                     if 'id' in kwargs:
                         path += f'/{kwargs.pop("id")}'
                     route = _Route(method, path)
-                    asyncio.create_task(self.process_command(
+                    task = asyncio.create_task(self.process_command(
                         name, guild_id, route, kwargs))
+                    tasks.append(task)
+        await asyncio.gather(*tasks)
 
     async def sync_cmds(self, state, todo, done, guild_id):
         # todo - registered in code
@@ -1054,7 +1133,8 @@ class SlashBot(commands.Bot):
         for name in to_update:
             cmd_dict = todo[name].to_dict()
             up_to_date = all(done[name].get(k, ...) == cmd_dict.get(k, ...)
-                             for k in {'name', 'description', 'options'})
+                             for k in {'name', 'description',
+                                       'options', 'default_permission'})
             if up_to_date:
                 logger.debug('GET\t%s\tin guild\t%s', name, guild_id)
                 todo[name].id = int(done[name]['id'])
@@ -1078,3 +1158,47 @@ class SlashBot(commands.Bot):
             logger.debug('%s\t%s\tin guild\t%s', route.method, name, guild_id)
         if cmd is not None:
             cmd.id = int(data['id'])
+
+    async def register_permissions(self, guild_id: int = None):
+        """Update command permissions on the API.
+
+        guild_id: :class:`int`
+            Only update permissions for this guild. Note: All commands
+            will still be updated, but only permissions related to this
+            guild will be updated.
+        """
+        try:
+            await self._register_permissions(guild_id)
+        except discord.HTTPException:
+            logger.exception('Registering command permissions failed')
+            asyncio.create_task(self.close())
+            raise
+
+    async def _register_permissions(self, guild_id: int = None):
+        app_info = self.app_info
+        guild_path = f"/applications/{app_info.id}/guilds/{{0}}/commands/permissions"
+        guild_ids = {g.id for g in self.guilds} | {cmd.guild_id for cmd in self.slash}
+        guild_ids.discard(None)
+        guilds: Dict[int, List[dict]] = {}
+        for cmd in self.slash:
+            defaults = cmd.perms_dict(None)
+            if defaults['permissions']:
+                for gid in guild_ids:
+                    # This is only for guilds that have no specific perms.
+                    # Guilds that do have specific perms will have the default
+                    # perms included in (and updated by) the specific ones.
+                    # So if the guild from the overall list has specific perm
+                    # overrides, skip it here.
+                    if guild_id not in {gid, None} or gid in cmd.permissions:
+                        continue
+                    guilds.setdefault(gid, []).append(defaults)
+            for gid in cmd.permissions:
+                if gid is None:
+                    continue # don't actually pass None into the API
+                if guild_id not in {gid, None}:
+                    continue
+                guilds.setdefault(gid, []).append(cmd.perms_dict(gid))
+        for guild_id, data in guilds.items():
+            route = _Route('PUT', guild_path.format(guild_id))
+            await self.http.request(route, json=data)
+            logger.debug('PUT guild\t%s\tpermissions', guild_id)

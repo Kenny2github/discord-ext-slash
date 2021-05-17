@@ -95,18 +95,16 @@ async def names(
     emb.add_field(name='Role Name', value=role.name)
     await ctx.respond(embed=emb, ephemeral=True)
 
-@client.slash_cmd()
+@client.slash_cmd(default_permission=False)
 async def stop(ctx: slash.Context):
     """Stop the bot."""
     await ctx.respond('Goodbye', ephemeral=True)
     await client.close()
 
-@stop.check
-async def check_owner(ctx: slash.Context):
-    if client.app_info.owner.id != ctx.author.id:
-        await ctx.respond(embeds=[
-            discord.Embed(title='You are not the owner!', color=0xff0000)])
-        return False
+@client.event
+async def on_slash_permissions():
+    stop.add_perm(client.app_info.owner, True, None)
+    await client.register_permissions()
 
 # show extension logs
 logger = logging.getLogger('discord.ext.slash')
