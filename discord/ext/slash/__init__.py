@@ -68,7 +68,7 @@ __all__ = [
     'ApplicationCommandOptionType',
     'ApplicationCommandPermissionType',
     'InteractionResponseType',
-    'MessageFlags',
+    'CallbackFlags',
     'Context',
     'Interaction',
     'Option',
@@ -96,6 +96,8 @@ class ApplicationCommandOptionType(IntEnum):
     USER = 6
     CHANNEL = 7
     ROLE = 8
+    MENTIONABLE = 9
+    NUMBER = 10
 
 class ApplicationCommandPermissionType(IntEnum):
     """Possible types of permission grants."""
@@ -105,53 +107,37 @@ class ApplicationCommandPermissionType(IntEnum):
 class InteractionResponseType(IntEnum):
     """Possible ways to respond to an interaction.
 
-    .. attribute:: Pong
+    .. attribute:: PONG
 
         Only used to ACK a Ping, never valid here.
         Included only for completeness
-    .. attribute:: Acknowledge
-
-        Deprecated
-    .. attribute:: ChannelMessage
-
-        Deprecated
-    .. attribute:: ChannelMessageWithSource
+    .. attribute:: CHANNEL_MESSAGE_WITH_SOURCE
 
         Show user input and send a message. Default.
-    .. attribute:: DeferredChannelMessageWithSource
+    .. attribute:: DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
 
         Show user input and display a "waiting for bot" system message.
         Send a response with this type and edit the response later if you
         need to do some asynchronous fetch or something.
     """
     # ACK a Ping
-    Pong = 1
-    # ACK a command without sending a message, eating the user's input
-    # DEPRECATED - UI shows command like a reply,
-    # so there is no way to "[eat] the user's input"
-    Acknowledge = 2
-    # respond with a message, eating the user's input
-    # DEPRECATED - same as Acknowledge
-    ChannelMessage = 3
+    Pong = PONG = 1
     # Respond immediately to an interaction
-    ChannelMessageWithSource = 4
+    ChannelMessageWithSource = CHANNEL_MESSAGE_WITH_SOURCE = 4
     # ACK an interaction and send a response later
-    DeferredChannelMessageWithSource = 5
+    DeferredChannelMessageWithSource = DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = 5
     # ACK a command without sending a message, showing the user's input
     # (Former name and description, now renamed)
     AcknowledgeWithSource = DeferredChannelMessageWithSource
 
-class MessageFlags(IntEnum):
+class CallbackFlags(IntEnum):
     """Flags to pass to the ``flags`` argument of the interaction response.
-    See also: https://discord.dev/resources/channel#message-object-message-flags
+    See the Interaction Application Command Callback Data Flags section in
+    https://discord.com/developers/docs/interactions/slash-commands
     """
-    CROSSPOSTED = 1 << 0
-    IS_CROSSPOST = 1 << 1
-    SUPPRESS_EMBEDS = 1 << 2
-    SOURCE_MESSAGE_DELETED = 1 << 3
-    URGENT = 1 << 4
-    HAS_THREAD = 1 << 5
     EPHEMERAL = 1 << 6
+
+MessageFlags = CallbackFlags
 
 class _Route(discord.http.Route):
     BASE = 'https://discord.com/api/v8'
@@ -296,58 +282,21 @@ class Context(discord.Object, _AsyncInit):
                     ApplicationCommandOptionType.USER,
                     ApplicationCommandOptionType.CHANNEL,
                     ApplicationCommandOptionType.ROLE,
+                    ApplicationCommandOptionType.MENTIONABLE,
                 }:
                     value = discord.Object(value)
                 if opttype == ApplicationCommandOptionType.USER:
-                    def resolve_member(member):
-                        member['user'] = resolved['users'][str(value.id)]
-                        return PartialMember(
-                            data=member, guild=self.guild,
-                            state=self.client._connection)
-                    def resolve_user(user):
-                        return discord.User(
-                            state=self.client._connection, data=user)
-                    value = await self._try_get(
-                        value, self._get_member, self._fetch_member, 'member',
-                        resolve_method=resolve_member, resolved=resolved)
-                    if type(value) is discord.Object:
-                        value = await self._try_get(
-                            value, None, None, 'user', fq=False,
-                            resolve_method=resolve_user, resolved=resolved)
+                    value = await self._try_get_user(value, resolved)
                 elif opttype == ApplicationCommandOptionType.CHANNEL:
-                    def get_channel(oid):
-                        return self.guild.get_channel(oid)
-                    def resolve_channel(channel):
-                        # discord.py doesn't access this with a default,
-                        # but it seems like the resolved object doesn't
-                        # provide it either, so set it if not set.
-                        # Also can't use None here because position is
-                        # used as a sort key too.
-                        channel.setdefault('position', -1)
-                        ctype = channel['type']
-                        ctype, _ = discord.channel._channel_factory(ctype)
-                        if ctype is discord.TextChannel:
-                            ctype = PartialTextChannel
-                        elif ctype is discord.CategoryChannel:
-                            ctype = PartialCategoryChannel
-                        elif ctype is discord.VoiceChannel:
-                            ctype = PartialVoiceChannel
-                        return ctype(state=self.client._connection,
-                                     guild=self.guild, data=channel)
-                    value = await self._try_get(
-                        value, get_channel, self.client.fetch_channel, 'channel',
-                        resolve_method=resolve_channel, resolved=resolved)
+                    value = await self._try_get_channel(value, resolved)
                 elif opttype == ApplicationCommandOptionType.ROLE:
-                    def get_role(oid):
-                        return self.guild.get_role(oid)
-                    def resolve_role(role):
-                        # monkeypatch for discord.py
-                        role['permissions_new'] = role['permissions']
-                        return PartialRole(state=self.client._connection,
-                                           guild=self.guild, data=role)
-                    value = await self._try_get(
-                        value, get_role, None, 'role', fng=False,
-                        resolve_method=resolve_role, resolved=resolved)
+                    value = await self._try_get_role(value, resolved)
+                elif opttype == ApplicationCommandOptionType.MENTIONABLE:
+                    # mention less people by default, though no two objects
+                    # should have the same snowflake ID anyway
+                    value = await self._try_get_user(value, resolved, False)
+                    if type(value) is discord.Object:
+                        value = await self._try_get_role(value, resolved)
                 kwargs[opt['name']] = value
             elif 'options' in opt:
                 self.command = self.command.slash[opt['name']]
@@ -416,6 +365,63 @@ class Context(discord.Object, _AsyncInit):
             typename, default.id, self.id)
         return resolve_method(obj)
 
+    async def _try_get_user(
+        self, value: discord.Object,
+        resolved: dict, try_user: bool = True
+    ):
+        def resolve_member(member):
+            member['user'] = resolved['users'][str(value.id)]
+            return PartialMember(
+                data=member, guild=self.guild,
+                state=self.client._connection)
+        def resolve_user(user):
+            return discord.User(
+                state=self.client._connection, data=user)
+        value = await self._try_get(
+            value, self._get_member, self._fetch_member, 'member',
+            resolve_method=resolve_member, resolved=resolved)
+        if type(value) is discord.Object and try_user:
+            value = await self._try_get(
+                value, None, None, 'user', fq=False,
+                resolve_method=resolve_user, resolved=resolved)
+        return value
+
+    async def _try_get_channel(self, value: discord.Object, resolved: dict):
+        def get_channel(oid):
+            return self.guild.get_channel(oid)
+        def resolve_channel(channel):
+            # discord.py doesn't access this with a default,
+            # but it seems like the resolved object doesn't
+            # provide it either, so set it if not set.
+            # Also can't use None here because position is
+            # used as a sort key too.
+            channel.setdefault('position', -1)
+            ctype = channel['type']
+            ctype, _ = discord.channel._channel_factory(ctype)
+            if ctype is discord.TextChannel:
+                ctype = PartialTextChannel
+            elif ctype is discord.CategoryChannel:
+                ctype = PartialCategoryChannel
+            elif ctype is discord.VoiceChannel:
+                ctype = PartialVoiceChannel
+            return ctype(state=self.client._connection,
+                            guild=self.guild, data=channel)
+        return await self._try_get(
+            value, get_channel, self.client.fetch_channel, 'channel',
+            resolve_method=resolve_channel, resolved=resolved)
+
+    async def _try_get_role(self, value: discord.Object, resolved: dict):
+        def get_role(oid):
+            return self.guild.get_role(oid)
+        def resolve_role(role):
+            # monkeypatch for discord.py
+            role['permissions_new'] = role['permissions']
+            return PartialRole(state=self.client._connection,
+                                guild=self.guild, data=role)
+        return await self._try_get(
+            value, get_role, None, 'role', fng=False,
+            resolve_method=resolve_role, resolved=resolved)
+
     def _get_member(self, mid):
         return self.guild.get_member(mid)
 
@@ -457,13 +463,6 @@ class Context(discord.Object, _AsyncInit):
         """
         if deferred:
             rtype = InteractionResponseType.DeferredChannelMessageWithSource
-        if rtype in {
-            InteractionResponseType.Acknowledge,
-            InteractionResponseType.ChannelMessage,
-        }:
-            warn(f'{rtype!r} is deprecated, see: '
-                 'https://github.com/discord/discord-api-docs/pull/2615',
-                 DeprecationWarning)
         content = str(content)
         if embed and embeds:
             raise TypeError('Cannot specify both embed and embeds')

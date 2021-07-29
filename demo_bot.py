@@ -59,21 +59,31 @@ async def repeat(ctx: slash.Context, message: msg_opt, ephemeral: eph_opt = Fals
 
 delay_opt = slash.Option(
     description='How long to wait first',
+    # any real number, like 2 or 4.3
+    type=slash.ApplicationCommandOptionType.NUMBER)
+count_opt = slash.Option(
+    description='How many times to repeat the message',
+    # integers only, like 1 or 3
     type=slash.ApplicationCommandOptionType.INTEGER)
 
 @say.slash_cmd()
-async def wait(ctx: slash.Context, message: msg_opt, delay: delay_opt = 5):
+async def wait(
+    ctx: slash.Context, message: msg_opt,
+    delay: delay_opt = 5, count: count_opt = 1
+):
     """Make the bot wait a bit before repeating your message."""
     # sends a "Bot is thinking..." response - if there is long processing to do,
     # send this first and make the actual response later
     await ctx.respond(deferred=True)
+    # long processing
     await asyncio.sleep(delay)
     # make the actual response with a second respond() call (not send or webhook.send!)
     # further respond() calls after *this* one will edit the message
     await ctx.respond(message, allowed_mentions=discord.AllowedMentions.none())
-    await asyncio.sleep(delay)
-    # further messages after the response must be sent through the webhook
-    await ctx.webhook.send('An extra message')
+    for _ in range(count):
+        await asyncio.sleep(delay)
+        # further messages after the response must be sent through the webhook
+        await ctx.webhook.send('An extra message')
 
 @client.slash_cmd(name='names')
 async def names(
@@ -86,13 +96,18 @@ async def names(
     user: slash.Option(description='A user',
                        type=slash.ApplicationCommandOptionType.USER),
     role: slash.Option(description='A role',
-                       type=slash.ApplicationCommandOptionType.ROLE)
+                       type=slash.ApplicationCommandOptionType.ROLE),
+    # This option type will try to resolve to either a user or a role.
+    # It can be thought of as a union of USER and ROLE.
+    ping: slash.Option(description='Someone/something to ping',
+                       type=slash.ApplicationCommandOptionType.MENTIONABLE)
 ):
     """Return a combination of names, somehow."""
     emb = discord.Embed()
     emb.add_field(name='Channel Name', value=channel.name)
     emb.add_field(name='User Name', value=user.name)
     emb.add_field(name='Role Name', value=role.name)
+    emb.add_field(name='Ping', value=ping.mention)
     await ctx.respond(embed=emb, ephemeral=True)
 
 @client.slash_cmd(default_permission=False)
