@@ -2,7 +2,7 @@
 Support slash commands.
 
 Example Usage
-=============
+~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -39,17 +39,17 @@ Example Usage
     client.run(token)
 
 Notes
-=====
-* ``slash.Context`` emulates ``commands.Context``, but only to a certain extent.
+~~~~~
+
+* :class:`~discord.ext.slash.Context` emulates
+  :class:`discord.ext.commands.Context`, but only to a certain extent.
   Notably, ``ctx.message`` does not exist, because slash commands can be run
   completely without the involvement of messages. However, channel and author
   information is still available.
 * All descriptions are **required**.
 * You must grant the bot ``applications.commands`` permissions in the OAuth2 section of the developer dashboard.
 
-See the wiki_.
-
-.. _wiki: https://github.com/Kenny2github/discord-ext-slash/wiki
+See the `docs <https://discord-ext-slash.rtfd.io>`_.
 '''
 from __future__ import annotations
 import sys
@@ -85,10 +85,44 @@ __all__ = [
 __version__ = '0.8.0'
 
 class SlashWarning(UserWarning):
-    """Watch out, this may cause problems down the line."""
+    """:mod:`discord.ext.slash`-specific warning type."""
 
 class ApplicationCommandOptionType(IntEnum):
-    """Possible option types. Default is ``STRING``."""
+    """Possible :class:`Command` :class:`Option` types.
+    Default is :attr:`STRING`.
+
+    .. attribute:: SUB_COMMAND
+
+        Marks a sub-:class:`Command`, only used internally.
+    .. attribute:: SUB_COMMAND_GROUP
+
+        Marks a :class:`Group`, only used internally.
+
+    The type signatures of the below attributes mark the type
+    that the argument value is passed as. For example, options
+    of type :attr:`STRING` are passed as :class:`str`.
+
+    .. attribute:: STRING
+        :type: str
+    .. attribute:: INTEGER
+        :type: int
+    .. attribute:: BOOLEAN
+        :type: bool
+    .. attribute:: USER
+        :type: Union[discord.Member, discord.User,
+            PartialMember, discord.Object]
+    .. attribute:: CHANNEL
+        :type: Union[discord.TextChannel, discord.CategoryChannel,
+            discord.VoiceChannel, PartialTextChannel, PartialCategoryChannel,
+            PartialVoiceChannel, discord.Object]
+    .. attribute:: ROLE
+        :type: Union[discord.Role, PartialRole, discord.Object]
+    .. attribute:: MENTIONABLE
+        :type: Union[discord.Member, discord.User, PartialMember,
+            discord.Role, PartialRole, discord.Object]
+    .. attribute:: NUMBER
+        :type: float
+    """
     SUB_COMMAND = 1
     SUB_COMMAND_GROUP = 2
     STRING = 3
@@ -101,17 +135,27 @@ class ApplicationCommandOptionType(IntEnum):
     NUMBER = 10
 
 class ApplicationCommandPermissionType(IntEnum):
-    """Possible types of permission grants."""
+    """Possible types of permission grants.
+    For use in :meth:`Command.add_perm` and :func:`permit`.
+
+    .. attribute:: ROLE
+
+        Specifies that this permission grant is to a role.
+    .. attribute:: USER
+
+        Specifies that this permission grant is to a user.
+    """
     ROLE = 1
     USER = 2
 
 class InteractionResponseType(IntEnum):
     """Possible ways to respond to an interaction.
+    For use in :meth:`Context.respond`.
 
     .. attribute:: PONG
 
         Only used to ACK a Ping, never valid here.
-        Included only for completeness
+        Included only for completeness.
     .. attribute:: CHANNEL_MESSAGE_WITH_SOURCE
 
         Show user input and send a message. Default.
@@ -132,9 +176,11 @@ class InteractionResponseType(IntEnum):
     AcknowledgeWithSource = DeferredChannelMessageWithSource
 
 class CallbackFlags(IntFlag):
-    """Flags to pass to the ``flags`` argument of the interaction response.
-    See the Interaction Application Command Callback Data Flags section in
-    https://discord.com/developers/docs/interactions/slash-commands
+    """Flags to pass to the ``flags`` argument of :meth:`Context.respond`.
+
+    .. attribute:: EPHEMERAL
+
+        Only the user receiving the message can see it
     """
     EPHEMERAL = 1 << 6
 
@@ -153,56 +199,83 @@ class _AsyncInit:
         pass
 
 class PartialObject(discord.Object):
-    """Subclasses of this have their .guild as a discord.Object,
-    so their guild-related functionality may break.
+    """Subclasses of this have their .:attr:`guild` as a
+    :class:`~discord.Object`, so their guild-related functionality may break.
+
+    .. attribute:: guild
+        :type: discord.Object
     """
     guild: discord.Object
 
 class PartialTextChannel(discord.TextChannel, PartialObject):
+    """A partial :class:`~discord.TextChannel`."""
     pass
 
 class PartialCategoryChannel(discord.CategoryChannel, PartialObject):
+    """A partial :class:`~discord.CategoryChannel`."""
     pass
 
 class PartialVoiceChannel(discord.VoiceChannel, PartialObject):
+    """A partial :class:`~discord.VoiceChannel`."""
     pass
 
 class PartialMember(discord.Member, PartialObject):
+    """A partial :class:`~discord.Member`."""
     pass
 
 class PartialRole(discord.Role, PartialObject):
+    """A partial :class:`~discord.Role`."""
     pass
 
 class Context(discord.Object, _AsyncInit):
     """Object representing an interaction.
 
-    Attributes
-    -----------
-    id: :class:`int`
+    .. attribute:: id
+        :type: int
+
         The interaction ID.
-    guild: Union[:class:`discord.Guild`, :class:`discord.Object`]
+    .. attribute:: guild
+        :type: Union[discord.Guild, discord.Object]
+
         The guild where the interaction took place.
-        Can be an Object with just the ID if the client is not in the guild.
-    channel: Union[:class:`discord.TextChannel`, :class:`discord.Object`]
+        Can be an :class:`~discord.Object` with just the ID
+        if the client is not in the guild.
+    .. attribute:: channel
+        :type: Union[discord.TextChannel, discord.Object]
+
         The channel where the command was run.
-        Can be an Object with just the ID if the client is not in the guild.
-    author: :class:`discord.Member`
+        Can be an :class:`~discord.Object` with just the ID
+        if the client is not in the guild.
+    .. attribute:: author
+        :type: discord.Member
+
         The user who ran the command.
-        If ``guild`` is an Object, a lot of methods that require the guild
-        will break and should not be relied on.
-    command: :class:`Command`
+        If :attr:`guild` is an :class:`~discord.Object`, a lot of
+        :class:`~discord.Member` methods that require the guild will break
+        and should not be relied on.
+    .. attribute:: command
+        :type: Command
+
         The command that was run.
-    options: Mapping[:class:`str`, Any]
+    .. attribute:: options
+        :type: Mapping[str, Any]
+
         The options passed to the command (including this context).
         More useful in groups and checks.
-    me: Optional[:class:`discord.Member`]
-        The bot, as a ``Member`` in that context.
-        Can be None if the client is not in the guild.
-    client: :class:`SlashBot`
+    .. attribute:: me
+        :type: Optional[discord.Member]
+
+        The bot, as a :class:`~discord.Member` in that context.
+        Can be :const:`None` if the client is not in the guild.
+    .. attribute:: client
+        :type: SlashBot
+
         The bot.
-    webhook: Optional[:class:`discord.Webhook`]
+    .. attribute:: webhook
+        :type: Optional[discord.Webhook]
+
         Webhook used for sending followup messages.
-        None until interaction response has been sent
+        :const:`None` until interaction response has been sent
     """
 
     id: int
@@ -217,12 +290,12 @@ class Context(discord.Object, _AsyncInit):
 
     @property
     def bot(self) -> SlashBot:
-        """The bot. Alias for self.client."""
+        """The bot. Alias for :attr:`client`."""
         return self.client
 
     @bot.setter
     def bot(self, value: SlashBot):
-        """The bot. Alias for self.client."""
+        """The bot. Alias for :attr:`client`."""
         self.client = value
 
     async def __init__(self, client: SlashBot, cmd: Command, event: dict):
@@ -442,28 +515,29 @@ class Context(discord.Object, _AsyncInit):
     ):
         """Respond to the interaction. If called again, edits the response.
 
-        Parameters
-        -----------
-        content: :class:`str`
-            The content of the message.
-        embed: :class:`discord.Embed`
-            Shorthand for respond(embeds=[embed])
-        embeds: Iterable[:class:`discord.Embed`]
-            Up to 10 embeds (any more will be silently discarded)
-        allowed_mentions: :class:`discord.AllowedMentions`
-            Mirrors normal ``allowed_mentions`` in Messageable.send
-        file: :class:`discord.File`
-            Mirrors normal ``file`` in Messageable.send
-        ephemeral: :class:`bool`
-            Shortcut to setting ``flags=MessageFlags.EPHEMERAL``.
+        :param str content: The content of the message.
+        :param discord.Embed embed: Shorthand for ``respond(embeds=[embed])``
+        :param embeds: Up to 10 embeds (any more will be silently discarded)
+        :type embeds: Iterable[discord.Embed]
+        :param discord.AllowedMentions allowed_mentions:
+            Mirrors normal ``allowed_mentions`` in
+            :meth:`~discord.abc.Messageable.send`
+        :param discord.File file:
+            Mirrors normal ``file`` in :meth:`~discord.abc.Messageable.send`
+        :param bool ephemeral:
+            Shortcut to setting ``flags |=`` :attr:`CallbackFlags.EPHEMERAL`.
             If other flags are present, they are preserved.
-        deferred: :class:`bool`
-            Shortcut to setting ``rtype=DeferredChannelMessageWithSource``.
-            Overrides ``rtype`` unconditionally if ``True``.
-        flags: Union[int, :class:`MessageFlags`]
-            Message flags, ORed together
-        rtype: :class:`InteractionResponseType`
+        :param bool deferred:
+            Shortcut to setting ``rtype =``
+            :attr:`~InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE`.
+            Overrides ``rtype`` unconditionally if :const:`True`.
+        :param flags: Message flags, ORed together
+        :type flags: Union[CallbackFlags, int]
+        :param InteractionResponseType rtype:
             The type of response to send. See that class's documentation.
+
+        :raises TypeError: if both ``embed`` and ``embeds`` are specified.
+        :raises ValueError: if sending channel message without content.
         """
         if deferred:
             rtype = InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
@@ -537,6 +611,8 @@ class Context(discord.Object, _AsyncInit):
 
     async def send(self, *args, **kwargs):
         """Send a message in the channel where the the command was run.
+        Equivalent to :meth:`~discord.TextChannel.send`
+        for :attr:`Context.channel`.
 
         Only method that works after the interaction token has expired.
         Only works if client is present there as a bot user too.
@@ -549,23 +625,39 @@ class Option:
     """An argument to a :class:`Command`.
     This must be passed as an annotation to the corresponding argument.
 
-    Parameters
-    -----------
-    description: :class:`str`
+    Constructor arguments map directly to attributes, besides the one below
+    which has a different type signature:
+
+    :param choices:
+        Strings are converted into :class:`Choice` objects with the same
+        ``name`` and ``value``. :class:`dict` objects are passed as kwargs to
+        the :class:`Choice` constructor.
+    :type choices: Optional[Iterable[Union[str, Mapping[str, str], Choice]]]
+
+    .. attribute:: description
+        :type: str
+
         The description of the option, displayed to users.
-    type: :class:`ApplicationCommandOptionType`
-        The argument type. This defaults to
-        :attr:`ApplicationCommandOptionType.STRING`
-    name: Optional[:class:`str`]
+    .. attribute:: type
+        :type: ApplicationCommandOptionType
+        :value: :attr:`ApplicationCommandOptionType.STRING`
+
+        The argument type.
+    .. attribute:: name
+        :type: Optional[str]
+        :value: None
+
         The name of the option, if different from its argument name.
-    required: Optional[:class:`bool`]
-        If ``True``, this option must be specified for a valid command
-        invocation. Defaults to ``False``.
-    choices: Optional[Iterable[Union[
-            :class:`str`, Mapping[str, str], :class:`Choice`]]]
-        If specified, only these values are allowed for this option.
-        Strings are converted into Choices with the same name and value
-        Dicts are passed as kwargs to the Choice constructor.
+    .. attribute:: required
+        :type: bool
+        :value: False
+
+        If :const:`True`, this option must be specified for a valid command
+        invocation.
+    .. attribute:: choices
+        :type: Optional[list[Choice]]
+
+        Only these values are allowed for this option.
     """
     description: str
     type: ApplicationCommandOptionType = ApplicationCommandOptionType.STRING
@@ -611,11 +703,15 @@ class Option:
 class Choice:
     """Represents one choice for an option value.
 
-    Parameters
-    -----------
-    name: :class:`str`
+    Constructor arguments map directly to attributes.
+
+    .. attribute:: name
+        :type: str
+
         The description of the choice, displayed to users.
-    value: :class:`str`
+    .. attribute:: value
+        :type: str
+
         The actual value fed into the application.
     """
     name: str
@@ -645,35 +741,81 @@ CommandPermissionsDict = Dict[Optional[int], Dict[Tuple[
 class Command(discord.Object):
     """Represents a slash command.
 
-    Attributes
-    -----------
-    coro: Coroutine
+    The following constructor argument does not map to an attribute:
+
+    :param Coroutine check:
+        A coroutine to run before calling the command.
+        If it returns :const:`False` (not falsy, :const:`False`),
+        then the command is not run.
+
+    The following attributes are set by constructor arguments:
+
+    .. attribute:: coro
+        :type: Coroutine
+
         (Required) Original callback for the command.
-    id: Optional[:class:`int`]
+    .. attribute:: id
+        :type: Optional[int]
+
         ID of registered command. Can be None when not yet registered,
         or if not a top-level command.
-    name: :class:`str`
-        Command name. Defaults to coro name.
-    description: :class:`str`
-        Description shown in command list. Defaults to coro doc.
-    guild_id: Optional[:class:`int`]
+    .. attribute:: name
+        :type: str
+
+        Command name. Defaults to :attr:`coro` ``.__name__``.
+    .. attribute:: description
+        :type: str
+
+        Description shown in command list. Default :attr:`coro` ``.__doc__``.
+    .. attribute:: guild_id
+        :type: Optional[int]
+        :value: None
+
         If present, this command only exists in this guild.
-    parent: Optional[:class:`Group`]
+    .. attribute:: parent
+        :type: Optional[Group]
+        :value: None
+
         Parent (sub)command group.
-    default_permission: :class:`bool`
-        If ``False`` (default ``True``), this command is disabled by default
+    .. attribute:: default_permission
+        :type: bool
+        :value: True
+
+        If :const:`False`, this command is disabled by default
         when the bot is added to a new guild. It must be re-enabled per user
         or role using permissions.
-    options: Mapping[:class:`str`, :class:`Option`]
-        Options for this command. Not passable as a parameter;
-        can only be set by inspecting the function annotations.
-    permissions: :class:`CommandPermissionsDict`
+
+    :raises TypeError:
+        if ``coro`` has a required argument (other than ``self``)
+        without an annotation.
+    :raises ValueError:
+        if no ``description`` is specified and ``coro`` has no docstring.
+    :raises ValueError:
+        if no arguments to ``coro`` are annotated with
+        :class:`Context` or a subclass.
+
+    The following attributes are *not* set by constructor arguments:
+
+    .. attribute:: options
+        :type: Mapping[str, Option]
+
+        Options for this command. Set by inspecting the function annotations.
+    .. attribute:: permissions
+        :type: CommandPermissionsDict
+
         Permission overrides for this command. A dict of guild IDs to dicts of:
         role or user or member objects (partial or real) to boolean
         enable/disable values to grant/deny permissions.
-    default: :class:`bool`
-        If ``True``, invoking the base parent of this command translates
+    .. attribute:: default
+        :type: bool
+        :value: False
+
+        If :const:`True`, invoking the base parent of this command translates
         into invoking this subcommand. (Not settable in arguments.)
+
+    .. decoratormethod:: check
+
+        Set this command's check to this coroutine.
     """
     cog = None
     coro: Coroutine
@@ -790,8 +932,41 @@ class Command(discord.Object):
         type: ApplicationCommandPermissionType = None
     ):
         """Add a permission override.
-        ``guild_id`` overrides target.guild.id, if specified. If specified to
-        be None, this sets permissions for all guilds.
+
+        :param target: The role or user to assign this permission to.
+        :type target: Union[discord.Role, PartialRole, discord.Member,
+            discord.User, PartialMember, discord.Object]
+        :param bool perm:
+            :const:`True` to grant permission, :const:`False` to deny it
+        :param guild_id:
+            The guild ID to set the permission for, or :const:`None` to apply
+            this to the defaults that all guilds inherit for this command.
+            If specified, overrides ``target.guild.id``.
+            Must be specified if ``target`` is a :class:`~discord.Object` or
+            a guildless :class:`~discord.User`.
+        :type guild_id: Optional[int]
+        :param ApplicationCommandPermissionType type:
+            The type of permission grant this is,
+            :attr:`~ApplicationCommandPermissionType.ROLE` or
+            :attr:`~ApplicationCommandPermissionType.USER`.
+            Must be specified if ``target`` is a :class:`~discord.Object`.
+
+        Generally there are four ways of calling this:
+
+        * ``add_perm(target, perm)`` will infer ``guild_id`` and ``type``
+          from ``target.guild.id`` and the type of ``target`` (respectively).
+        * ``add_perm(target, perm, guild_id)`` will infer the type, but
+          manually set the guild ID (e.g. with a :class:`~discord.User` and
+          not a :class:`~discord.Member`).
+        * ``add_perm(discord.Object(id), perm, guild_id, type)`` will manually
+          set the guild ID and type since all you have is an ID.
+        * ``add_perm(..., guild_id=None)`` will do any of the above but apply
+          the permissions to the defaults that all specific-guild permissions
+          will inherit from, instead of applying to any particular guild.
+
+        :raises ValueError: if ``type`` is unspecified but cannot be inferred.
+        :raises ValueError:
+            if ``guild_id`` is unspecified but cannot be inferred.
         """
         if type is None:
             if isinstance(target, discord.Role):
@@ -823,9 +998,6 @@ class Command(discord.Object):
             await self.coro(**ctx.options)
 
     def check(self, coro):
-        """Set this command's check to this coroutine.
-        Can be used as a decorator.
-        """
         self._check = coro
         return coro
 
@@ -866,15 +1038,24 @@ class Command(discord.Object):
 
 class Group(Command):
     """Represents a group of slash commands.
-    Attributes are the same unless documented below.
+    Attributes and constructor arguments are the same as :class:`Command`
+    unless documented below.
 
-    Attributes
-    -----------
-    coro: Coroutine
+    :param Coroutine coro:
         (Required) Callback invoked when a subcommand of this group is called.
-        (This is not a check! Register a check using :func:`Group.check`.)
-    slash: Mapping[:class:`str`, Union[:class:`Group`, :class:`Command`]]
+        (This is not a check! Register a check using :meth:`~Command.check`.)
+
+    .. attribute:: slash
+        :type: Mapping[str, Union[Group, Command]]
+
         Subcommands of this group.
+
+    .. decoratormethod:: slash_cmd(**kwargs)
+
+        See :meth:`SlashBot.slash_cmd`.
+    .. decoratormethod:: slash_group(**kwargs)
+
+        See :meth:`SlashBot.slash_group`.
     """
     cog = None
     slash: Mapping[str, Union[Group, Command]]
@@ -884,7 +1065,6 @@ class Group(Command):
         self.slash = {}
 
     def slash_cmd(self, **kwargs):
-        """See :class:`Command` doc"""
         kwargs['parent'] = self
         def decorator(func):
             cmd = Command(func, **kwargs)
@@ -894,11 +1074,10 @@ class Group(Command):
         return decorator
 
     def add_slash(self, func, **kwargs):
-        """See :class:`Command` doc"""
+        """See :meth:`SlashBot.add_slash`."""
         self.slash_cmd(**kwargs)(func)
 
     def slash_group(self, **kwargs):
-        """See :class:`Group` doc"""
         kwargs['parent'] = self
         def decorator(func):
             group = Group(func, **kwargs)
@@ -908,7 +1087,7 @@ class Group(Command):
         return decorator
 
     def add_slash_group(self, func, **kwargs):
-        """See :class:`Group` doc"""
+        """See :meth:`SlashBot.add_slash_group`."""
         self.slash_group(**kwargs)(func)
 
     def to_dict(self):
@@ -931,13 +1110,13 @@ class Group(Command):
         return data
 
 def cmd(**kwargs):
-    """Decorator that transforms a function into a :class:`Command`"""
+    """Decorator that transforms a function into a :class:`Command`."""
     def decorator(func):
         return Command(func, **kwargs)
     return decorator
 
 def group(**kwargs):
-    """Decorator that transforms a function into a :class:`Group`"""
+    """Decorator that transforms a function into a :class:`Group`."""
     def decorator(func):
         return Group(func, **kwargs)
     return decorator
@@ -957,7 +1136,43 @@ logger = logging.getLogger('discord.ext.slash')
 logger.setLevel(logging.INFO)
 
 class SlashBot(commands.Bot):
-    """A bot that supports slash commands."""
+    """A bot that supports slash commands.
+
+    Constructor arguments in addition to those provided to
+    :class:`discord.ext.commands.Bot` are as follows:
+
+    :param int debug_guild:
+        While testing your bot, it may be useful to have instant command
+        updates for global commands. Setting this to a guild ID will redirect
+        all global commands to commands specific to that guild. Once in
+        production, set this to :const:`None` or do not set it at all.
+    :param bool resolve_not_fetch:
+        If :const:`True` (the default), Discord objects passed in arguments
+        will be resolved from the slash commands API, not retrieved or fetched.
+    :param bool fetch_if_not_get:
+        If :const:`False` (the default), Discord objects passed in arguments
+        will not be fetched from the API if retrieving them from cache fails.
+
+    .. attribute:: app_info
+        :type: discord.AppInfo
+
+        Cached output of :meth:`application_info`.
+        Might not be present until :func:`on_ready` has fired at least once.
+    .. attribute:: slash
+        :type: set[Command]
+
+        All top-level :class:`Command` and :class:`Group` objects currently
+        registered **in code**.
+
+    .. decoratormethod:: slash_cmd(**kwargs)
+
+        Create a :class:`Command` with the decorated coroutine and ``**kwargs``
+        and add it to :attr:`slash`.
+    .. decoratormethod:: slash_group(**kwargs)
+
+        Create a :class:`Group` with the decorated coroutine and ``**kwargs``
+        and add it to :attr:`slash`.
+    """
 
     slash: Set[Command]
 
@@ -982,7 +1197,6 @@ class SlashBot(commands.Bot):
                 raise
 
     def slash_cmd(self, **kwargs):
-        """See :class:`Command` doc"""
         def decorator(func):
             cmd = Command(func, **kwargs)
             self.slash.add(cmd)
@@ -990,11 +1204,10 @@ class SlashBot(commands.Bot):
         return decorator
 
     def add_slash(self, func, **kwargs):
-        """See :class:`Command` doc"""
+        """Non-decorator version of :meth:`slash_cmd`."""
         self.slash_cmd(**kwargs)(func)
 
     def slash_group(self, **kwargs):
-        """See :class:`Group` doc"""
         def decorator(func):
             group = Group(func, **kwargs)
             self.slash.add(group)
@@ -1002,12 +1215,14 @@ class SlashBot(commands.Bot):
         return decorator
 
     def add_slash_group(self, func, **kwargs):
-        """See :class:`Group` doc"""
+        """Non-decorator version of :meth:`slash_group`."""
         self.slash_group(**kwargs)(func)
 
-    def add_slash_cog(self, cog):
+    def add_slash_cog(self, cog: type):
         """Add all attributes of ``cog`` that are
         :class:`Command` or :class:`Group` instances.
+
+        :param type cog: The cog to read attributes from.
         """
         for key in dir(cog):
             obj = getattr(cog, key)
@@ -1017,6 +1232,9 @@ class SlashBot(commands.Bot):
                     self.slash.add(obj)
 
     async def application_info(self):
+        """Equivalent to :meth:`discord.Client.application_info`, but
+        caches its output in :attr:`app_info`.
+        """
         self.app_info = await super().application_info()
         return self.app_info
 
@@ -1062,7 +1280,7 @@ class SlashBot(commands.Bot):
     async def register_commands(self, guild_id: int = None):
         """Update commands on the API.
 
-        guild_id: :class:`int`
+        :param int guild_id:
             Only update commands specific to this guild.
         """
         app_info = await self.application_info()
@@ -1151,7 +1369,7 @@ class SlashBot(commands.Bot):
     async def register_permissions(self, guild_id: int = None):
         """Update command permissions on the API.
 
-        guild_id: :class:`int`
+        :param int guild_id:
             Only update permissions for this guild. Note: All commands
             will still be updated, but only permissions related to this
             guild will be updated.

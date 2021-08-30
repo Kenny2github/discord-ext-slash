@@ -4,3 +4,5 @@ __pycache__/
 build/*
 *.egg*
 .vscode
+docs/_build
+docs/make.bat

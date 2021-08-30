@@ -2,7 +2,7 @@
 Support slash commands.
 
 Example Usage
-=============
+~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -39,14 +39,14 @@ Example Usage
     client.run(token)
 
 Notes
-=====
-* ``slash.Context`` emulates ``commands.Context``, but only to a certain extent.
+~~~~~
+
+* :class:`~discord.ext.slash.Context` emulates
+  :class:`discord.ext.commands.Context`, but only to a certain extent.
   Notably, ``ctx.message`` does not exist, because slash commands can be run
   completely without the involvement of messages. However, channel and author
   information is still available.
 * All descriptions are **required**.
 * You must grant the bot ``applications.commands`` permissions in the OAuth2 section of the developer dashboard.
 
-See the wiki_.
-
-.. _wiki: https://github.com/Kenny2github/discord-ext-slash/wiki
+See the `docs <https://discord-ext-slash.rtfd.io>`_.
