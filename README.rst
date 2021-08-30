@@ -41,8 +41,8 @@ Example Usage
 Notes
 ~~~~~
 
-* :class:`~discord.ext.slash.Context` emulates
-  :class:`discord.ext.commands.Context`, but only to a certain extent.
+* ``discord.ext.slash.Context`` emulates
+  ``discord.ext.commands.Context``, but only to a certain extent.
   Notably, ``ctx.message`` does not exist, because slash commands can be run
   completely without the involvement of messages. However, channel and author
   information is still available.
