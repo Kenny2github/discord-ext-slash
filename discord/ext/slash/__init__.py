@@ -54,8 +54,8 @@ See the wiki_.
 from __future__ import annotations
 import sys
 from warnings import warn
-from enum import IntEnum
-from typing import Coroutine, Dict, Set, Tuple, Union, Optional, Mapping, Any, List
+from enum import IntEnum, IntFlag
+from typing import Coroutine, Dict, Iterable, Set, Tuple, Union, Optional, Mapping, Any, List
 from functools import partial
 from inspect import signature
 import logging
@@ -78,6 +78,7 @@ __all__ = [
     'Group',
     'cmd',
     'group',
+    'permit',
     'SlashBot'
 ]
 
@@ -123,14 +124,14 @@ class InteractionResponseType(IntEnum):
     # ACK a Ping
     Pong = PONG = 1
     # Respond immediately to an interaction
-    ChannelMessageWithSource = CHANNEL_MESSAGE_WITH_SOURCE = 4
+    CHANNEL_MESSAGE_WITH_SOURCE = ChannelMessageWithSource = 4
     # ACK an interaction and send a response later
-    DeferredChannelMessageWithSource = DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = 5
+    DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = DeferredChannelMessageWithSource = 5
     # ACK a command without sending a message, showing the user's input
     # (Former name and description, now renamed)
     AcknowledgeWithSource = DeferredChannelMessageWithSource
 
-class CallbackFlags(IntEnum):
+class CallbackFlags(IntFlag):
     """Flags to pass to the ``flags`` argument of the interaction response.
     See the Interaction Application Command Callback Data Flags section in
     https://discord.com/developers/docs/interactions/slash-commands
@@ -432,9 +433,12 @@ class Context(discord.Object, _AsyncInit):
         return f'<Interaction id={self.id}>'
 
     async def respond(
-        self, content='', *, embed=None, embeds=None, allowed_mentions=None,
-        file=None, ephemeral=False, deferred=False, flags=None,
-        rtype=InteractionResponseType.ChannelMessageWithSource
+        self, content='', *, embed: discord.Embed = None,
+        embeds: Iterable[discord.Embed] = None,
+        allowed_mentions: discord.AllowedMentions = None,
+        file: discord.File = None, ephemeral: bool = False,
+        deferred: bool = False, flags: Union[CallbackFlags, int] = None,
+        rtype: InteractionResponseType = InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE
     ):
         """Respond to the interaction. If called again, edits the response.
 
@@ -462,7 +466,7 @@ class Context(discord.Object, _AsyncInit):
             The type of response to send. See that class's documentation.
         """
         if deferred:
-            rtype = InteractionResponseType.DeferredChannelMessageWithSource
+            rtype = InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
         content = str(content)
         if embed and embeds:
             raise TypeError('Cannot specify both embed and embeds')
@@ -493,7 +497,7 @@ class Context(discord.Object, _AsyncInit):
             }
             if content or embeds:
                 data['data'] = {'content': content}
-            elif rtype == InteractionResponseType.ChannelMessageWithSource:
+            elif rtype == InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE:
                 raise ValueError('sending channel message with no content')
             if embeds:
                 data['data']['embeds'] = embeds
@@ -569,8 +573,11 @@ class Option:
     required: Optional[bool] = False
     choices: Optional[List[Choice]] = None
 
-    def __init__(self, description: str,
-                 type=ApplicationCommandOptionType.STRING, **kwargs):
+    def __init__(
+        self, description: str,
+        type: ApplicationCommandOptionType = ApplicationCommandOptionType.STRING,
+        **kwargs
+    ):
         self.name = kwargs.pop('name', None) # can be set automatically
         self.type = type
         self.description = description
@@ -739,7 +746,7 @@ class Command(discord.Object):
         self._check = kwargs.pop('check', check)
 
     @property
-    def qualname(self):
+    def qualname(self) -> str:
         """Fully qualified name of command, including group names."""
         if self.parent is None:
             return self.name
@@ -752,9 +759,6 @@ class Command(discord.Object):
         return hash((self.name, self.guild_id))
 
     def _to_dict_common(self, data: dict):
-        # TODO: the API doesn't support this yet, so it is disabled for now.
-        if self.parent is not None and False:
-            data['default'] = self.default
         if self.parent is None:
             data['default_permission'] = self.default_permission
 
@@ -906,20 +910,6 @@ class Group(Command):
     def add_slash_group(self, func, **kwargs):
         """See :class:`Group` doc"""
         self.slash_group(**kwargs)(func)
-
-    def default(self, cmd: Command):
-        """Register ``cmd`` as the default subcommand,
-        to be invoked when this base group is invoked.
-        The command must already be registered in the group.
-
-        CURRENTLY HAS NO EFFECT - default is not yet supported
-        by the API, and is therefore disabled here. This library
-        will be updated once the API is.
-        """
-        if self.slash[cmd.name] is not cmd:
-            raise ValueError(f'{cmd!s} not a subcommand of {self!s}')
-        for c in self.slash.values():
-            c.default = c is cmd
 
     def to_dict(self):
         data = {
