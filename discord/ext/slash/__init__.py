@@ -669,6 +669,19 @@ class Option:
 
         Sets ``type`` to :attr:`ApplicationCommandOptionType.CHANNEL`,
         additionally restricted to a set of specific channel types.
+    .. attribute:: min_value
+        :type: Union[int, float, None]
+
+        For numerical options, this is the minimum value allowable.
+        If ``type`` is not a numerical type, it is inferred from the
+        type of this argument. Otherwise, this argument is cast to the
+        type corresponding to ``type``.
+    .. attribute:: max_value
+        :type: Union[int, float, None]
+
+        Same as ``min_value`` but maximum. If both ``min_value`` and
+        ``max_value`` are specified, *and* ``type`` is non-numeric,
+        ``type`` is inferred from this argument, not ``min_value``.
     """
     description: str
     type: ApplicationCommandOptionType = ApplicationCommandOptionType.STRING
@@ -676,6 +689,8 @@ class Option:
     required: Optional[bool] = False
     choices: Optional[List[Choice]] = None
     channel_types: Optional[Set[discord.ChannelType]] = None
+    min_value: Union[int, float, None] = None
+    max_value: Union[int, float, None] = None
 
     @staticmethod
     def value_to_enum(value: Union[int, discord.ChannelType]):
@@ -697,6 +712,26 @@ class Option:
             self.type = ApplicationCommandOptionType.CHANNEL
         else:
             self.type = ApplicationCommandOptionType(type)
+        if 'max_value' in kwargs:
+            self.max_value = kwargs.pop('max_value')
+            if self.type == ApplicationCommandOptionType.INTEGER:
+                self.max_value = int(self.max_value)
+            elif self.type == ApplicationCommandOptionType.NUMBER:
+                self.max_value = float(self.max_value)
+            elif isinstance(self.max_value, int):
+                self.type = ApplicationCommandOptionType.INTEGER
+            elif isinstance(self.max_value, float):
+                self.type = ApplicationCommandOptionType.NUMBER
+        if 'min_value' in kwargs:
+            self.min_value = kwargs.pop('min_value')
+            if self.type == ApplicationCommandOptionType.INTEGER:
+                self.min_value = int(self.min_value)
+            elif self.type == ApplicationCommandOptionType.NUMBER:
+                self.min_value = float(self.min_value)
+            elif isinstance(self.min_value, int):
+                self.type = ApplicationCommandOptionType.INTEGER
+            elif isinstance(self.min_value, float):
+                self.type = ApplicationCommandOptionType.NUMBER
         self.description = description
         self.required = kwargs.pop('required', False)
         choices = kwargs.pop('choices', None)
@@ -722,6 +757,10 @@ class Option:
             data['choices'] = [choice.to_dict() for choice in self.choices]
         if self.channel_types:
             data['channel_types'] = [t.value for t in self.channel_types]
+        if self.min_value is not None:
+            data['min_value'] = self.min_value
+        if self.max_value is not None:
+            data['max_value'] = self.max_value
         return data
 
     def clone(self):

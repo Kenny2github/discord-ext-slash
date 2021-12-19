@@ -115,6 +115,17 @@ async def names(
     emb.add_field(name='Text Channel Name', value=text_channel.name)
     await ctx.respond(embed=emb, ephemeral=True)
 
+@client.slash_cmd(name='math')
+async def numbers(
+    ctx: slash.Context,
+    num1: slash.Option(description='The first number',
+                       min_value=0),
+    num2: slash.Option(description='The second number',
+                       min_value=-4.20, max_value=6.9),
+):
+    """Do some math! (With limitations)"""
+    await ctx.respond(num1 + num2, ephemeral=True)
+
 @client.slash_cmd(default_permission=False)
 async def stop(ctx: slash.Context):
     """Stop the bot."""
