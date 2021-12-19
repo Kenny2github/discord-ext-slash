@@ -85,7 +85,7 @@ __all__ = [
     'SlashBot'
 ]
 
-__version__ = '0.8.1'
+__version__ = '0.9.0'
 
 class SlashWarning(UserWarning):
     """:mod:`discord.ext.slash`-specific warning type."""
