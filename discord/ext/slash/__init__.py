@@ -54,8 +54,10 @@ See the `docs <https://discord-ext-slash.rtfd.io>`_.
 from __future__ import annotations
 import sys
 from warnings import warn
-from enum import IntEnum, IntFlag
-from typing import Coroutine, Dict, Iterable, Set, Tuple, Union, Optional, Mapping, Any, List
+from enum import Enum, IntEnum, IntFlag
+from typing import (
+    Coroutine, Dict, Iterable, Set, Tuple,
+    Type, Union, Optional, Mapping, Any, List)
 from functools import partial
 from inspect import signature
 import logging
@@ -69,6 +71,7 @@ __all__ = [
     'ApplicationCommandPermissionType',
     'InteractionResponseType',
     'CallbackFlags',
+    'ChoiceEnum',
     'Context',
     'Interaction',
     'Option',
@@ -185,6 +188,13 @@ class CallbackFlags(IntFlag):
     EPHEMERAL = 1 << 6
 
 MessageFlags = CallbackFlags
+
+class ChoiceEnum(Enum):
+    """Callback parameters annotated with subclasses of this class
+    will use the enums as choices. See the ``/numbers`` command in the
+    demo bot for an example.
+    """
+    pass
 
 class _Route(discord.http.Route):
     BASE = 'https://discord.com/api/v8'
@@ -347,6 +357,9 @@ class Context(discord.Object, _AsyncInit):
                 else:
                     raise commands.CommandInvokeError(
                         f'No such option: {opt["name"]!r}')
+                _enum = self.command.options[opt['name']]._enum
+                if _enum is not None:
+                    value = _enum.__members__[value]
                 opttype = self.command.options[opt['name']].type
                 try:
                     opttype = ApplicationCommandOptionType(opttype)
@@ -628,6 +641,10 @@ class Option:
     Constructor arguments map directly to attributes, besides the ones below
     which have different type signatures:
 
+    :param description:
+        Annotating a parameter with ``EnumClass`` has the same effect as
+        with ``Option(description=EnumClass)``.
+    :type description: Union[str, Type[ChoiceEnum]]
     :param choices:
         Strings are converted into :class:`Choice` objects with the same
         ``name`` and ``value``. :class:`dict` objects are passed as kwargs to
@@ -692,6 +709,8 @@ class Option:
     min_value: Union[int, float, None] = None
     max_value: Union[int, float, None] = None
 
+    _enum: Optional[Type[ChoiceEnum]] = None
+
     @staticmethod
     def value_to_enum(value: Union[int, discord.ChannelType]):
         if isinstance(value, discord.ChannelType):
@@ -699,7 +718,7 @@ class Option:
         return discord.ChannelType(value)
 
     def __init__(
-        self, description: str,
+        self, description: Union[str, Type[ChoiceEnum]],
         type: ApplicationCommandOptionType = ApplicationCommandOptionType.STRING,
         **kwargs
     ):
@@ -732,7 +751,15 @@ class Option:
                 self.type = ApplicationCommandOptionType.INTEGER
             elif isinstance(self.min_value, float):
                 self.type = ApplicationCommandOptionType.NUMBER
-        self.description = description
+        if isinstance(description, str):
+            self.description = description
+        elif issubclass(description, ChoiceEnum):
+            kwargs['choices'] = [
+                Choice(desc.value, attr)
+                for attr, desc in description.__members__.items()]
+            self._enum = description
+            self.description = description.__doc__
+            self.type = ApplicationCommandOptionType.STRING
         self.required = kwargs.pop('required', False)
         choices = kwargs.pop('choices', None)
         if choices is not None:
@@ -764,7 +791,10 @@ class Option:
         return data
 
     def clone(self):
-        return type(self)(**self.to_dict())
+        value = type(self)(**self.to_dict())
+        if self._enum is not None:
+            value._enum = self._enum
+        return value
 
 class Choice:
     """Represents one choice for an option value.
@@ -920,9 +950,8 @@ class Command(discord.Object):
                 except:
                     typ = param.empty
             if (
-                not (isinstance(typ, Option) or (
-                    isinstance(typ, type) and issubclass(typ, Context)
-                ))
+                not (isinstance(typ, Option) or (isinstance(typ, type) and (
+                    issubclass(typ, ChoiceEnum) or issubclass(typ, Context))))
                 and param.default is param.empty
             ):
                 if not found_self_arg:
@@ -937,6 +966,8 @@ class Command(discord.Object):
             try:
                 if issubclass(typ, Context):
                     self._ctx_arg = param.name
+                elif issubclass(typ, ChoiceEnum):
+                    typ = Option(description=typ)
             except TypeError: # not even a class
                 pass
             if isinstance(typ, Option):

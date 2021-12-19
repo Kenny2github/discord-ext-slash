@@ -115,16 +115,35 @@ async def names(
     emb.add_field(name='Text Channel Name', value=text_channel.name)
     await ctx.respond(embed=emb, ephemeral=True)
 
-@client.slash_cmd(name='math')
+class ArithmeticOperator(slash.ChoiceEnum):
+    # The docstring is used as the description of the
+    # option - it is required
+    """The operation to perform on the numbers."""
+    # Only string options are supported by ChoiceEnum
+    ADDITION = '+'
+    SUBTRACTION = '-'
+    MULTIPLICATION = '\N{MULTIPLICATION SIGN}'
+    DIVISION = '\N{DIVISION SIGN}'
+
+@client.slash_cmd()
 async def numbers(
     ctx: slash.Context,
     num1: slash.Option(description='The first number',
                        min_value=0),
+    operator: ArithmeticOperator, # see above
     num2: slash.Option(description='The second number',
                        min_value=-4.20, max_value=6.9),
 ):
     """Do some math! (With limitations)"""
-    await ctx.respond(num1 + num2, ephemeral=True)
+    if operator == ArithmeticOperator.ADDITION:
+        value = num1 + num2
+    elif operator == ArithmeticOperator.SUBTRACTION:
+        value = num1 - num2
+    elif operator == ArithmeticOperator.MULTIPLICATION:
+        value = num1 * num2
+    elif operator == ArithmeticOperator.DIVISION:
+        value = num1 / num2
+    await ctx.respond(value, ephemeral=True)
 
 @client.slash_cmd(default_permission=False)
 async def stop(ctx: slash.Context):

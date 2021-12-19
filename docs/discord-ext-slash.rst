@@ -69,6 +69,7 @@ Enums
 .. autoclass:: InteractionResponseType
 .. autoclass:: CallbackFlags
 .. autoclass:: MessageFlags
+.. autoclass:: ChoiceEnum
 
 Events
 ------
