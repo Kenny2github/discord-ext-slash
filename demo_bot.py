@@ -100,7 +100,11 @@ async def names(
     # This option type will try to resolve to either a user or a role.
     # It can be thought of as a union of USER and ROLE.
     ping: slash.Option(description='Someone/something to ping',
-                       type=slash.ApplicationCommandOptionType.MENTIONABLE)
+                       type=slash.ApplicationCommandOptionType.MENTIONABLE),
+    # If you want to limit the channel type (e.g. text channels only),
+    # forgo the `type` parameter and use `channel_type(s)` instead
+    text_channel: slash.Option(description='A text channel',
+                               channel_type=discord.ChannelType.text),
 ):
     """Return a combination of names, somehow."""
     emb = discord.Embed()
@@ -108,6 +112,7 @@ async def names(
     emb.add_field(name='User Name', value=user.name)
     emb.add_field(name='Role Name', value=role.name)
     emb.add_field(name='Ping', value=ping.mention)
+    emb.add_field(name='Text Channel Name', value=text_channel.name)
     await ctx.respond(embed=emb, ephemeral=True)
 
 @client.slash_cmd(default_permission=False)

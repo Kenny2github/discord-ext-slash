@@ -625,14 +625,20 @@ class Option:
     """An argument to a :class:`Command`.
     This must be passed as an annotation to the corresponding argument.
 
-    Constructor arguments map directly to attributes, besides the one below
-    which has a different type signature:
+    Constructor arguments map directly to attributes, besides the ones below
+    which have different type signatures:
 
     :param choices:
         Strings are converted into :class:`Choice` objects with the same
         ``name`` and ``value``. :class:`dict` objects are passed as kwargs to
         the :class:`Choice` constructor.
     :type choices: Optional[Iterable[Union[str, Mapping[str, str], Choice]]]
+    :param channel_types:
+        Pass either the raw integers or the enum values.
+    :type channel_types: Optional[Iterable[Union[int, discord.ChannelType]]]
+    :param channel_type:
+        A shortcut to ``channel_types=[channel_type]``.
+    :type channel_type: Optional[Union[int, discord.ChannelType]]
 
     .. attribute:: description
         :type: str
@@ -658,12 +664,24 @@ class Option:
         :type: Optional[list[Choice]]
 
         Only these values are allowed for this option.
+    .. attribute:: channel_types
+        :type: Optional[set[discord.ChannelType]]
+
+        Sets ``type`` to :attr:`ApplicationCommandOptionType.CHANNEL`,
+        additionally restricted to a set of specific channel types.
     """
     description: str
     type: ApplicationCommandOptionType = ApplicationCommandOptionType.STRING
     name: Optional[str] = None
     required: Optional[bool] = False
     choices: Optional[List[Choice]] = None
+    channel_types: Optional[Set[discord.ChannelType]] = None
+
+    @staticmethod
+    def value_to_enum(value: Union[int, discord.ChannelType]):
+        if isinstance(value, discord.ChannelType):
+            return value
+        return discord.ChannelType(value)
 
     def __init__(
         self, description: str,
@@ -671,7 +689,14 @@ class Option:
         **kwargs
     ):
         self.name = kwargs.pop('name', None) # can be set automatically
-        self.type = type
+        if 'channel_types' in kwargs:
+            self.channel_types = set(map(self.value_to_enum, kwargs.pop('channel_types')))
+            self.type = ApplicationCommandOptionType.CHANNEL
+        elif 'channel_type' in kwargs:
+            self.channel_types = {self.value_to_enum(kwargs.pop('channel_type'))}
+            self.type = ApplicationCommandOptionType.CHANNEL
+        else:
+            self.type = ApplicationCommandOptionType(type)
         self.description = description
         self.required = kwargs.pop('required', False)
         choices = kwargs.pop('choices', None)
@@ -695,6 +720,8 @@ class Option:
             data['required'] = self.required
         if self.choices is not None:
             data['choices'] = [choice.to_dict() for choice in self.choices]
+        if self.channel_types:
+            data['channel_types'] = [t.value for t in self.channel_types]
         return data
 
     def clone(self):
