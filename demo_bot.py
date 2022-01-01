@@ -156,10 +156,16 @@ async def on_slash_permissions():
     stop.add_perm(client.app_info.owner, True, None)
     await client.register_permissions()
 
+@client.event
+async def on_before_slash_command_invoke(ctx: slash.Context):
+    logger.info('User %s running /%s', ctx.author, ctx.command)
+
 # show extension logs
 logger = logging.getLogger('discord.ext.slash')
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler())
+logger.handlers[0].setFormatter(logging.Formatter(
+    '{levelname}\t{asctime} {message}', style='{'))
 
 token = os.environ['DISCORD_TOKEN'].strip()
 

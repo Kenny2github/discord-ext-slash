@@ -85,3 +85,12 @@ Events
    API. If overriding using @:meth:`discord.Client.event`, you must await
    :meth:`-SlashBot.register_permissions` at the end of the event handler.
    See ``/stop`` in ``demo_bot.py`` for an example.
+
+.. function:: on_before_slash_command_invoke(ctx: Context)
+
+   Triggered immediately before a slash command is invoked, for logging etc.
+
+.. function:: on_after_slash_command_invoke(ctx: Context)
+
+   Triggered immediately after a *successful* slash command invocation.
+   Failed invocations will trigger :func:`discord.on_command_error` instead.

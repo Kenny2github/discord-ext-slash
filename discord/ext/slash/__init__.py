@@ -85,7 +85,7 @@ __all__ = [
     'SlashBot'
 ]
 
-__version__ = '0.9.0'
+__version__ = '0.9.1'
 
 class SlashWarning(UserWarning):
     """:mod:`discord.ext.slash`-specific warning type."""
@@ -1359,6 +1359,7 @@ class SlashBot(commands.Bot):
             raise commands.CommandNotFound(
                 f'No command {event["data"]["name"]!r} found by any critera')
         ctx = await cmd.coro.__annotations__[cmd._ctx_arg](self, cmd, event)
+        self.dispatch('before_slash_command_invoke', ctx)
         try:
             await ctx.command.invoke(ctx)
         except commands.CommandError as exc:
@@ -1370,6 +1371,8 @@ class SlashBot(commands.Bot):
                 raise commands.CommandInvokeError(exc) from exc
             except commands.CommandInvokeError as exc2:
                 self.dispatch('command_error', ctx, exc2)
+        else:
+            self.dispatch('after_slash_command_invoke', ctx)
 
     async def on_slash_permissions(self):
         await self.register_permissions()
