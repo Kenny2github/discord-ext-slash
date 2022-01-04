@@ -165,7 +165,7 @@ logger = logging.getLogger('discord.ext.slash')
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler())
 logger.handlers[0].setFormatter(logging.Formatter(
-    '{levelname}\t{asctime} {message}', style='{'))
+    '{levelname}\t{name}\t{asctime} {message}', style='{'))
 
 token = os.environ['DISCORD_TOKEN'].strip()
 
