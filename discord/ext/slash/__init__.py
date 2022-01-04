@@ -1443,8 +1443,8 @@ class SlashBot(commands.Bot):
                              for k in {'name', 'description',
                                        'options', 'default_permission'})
             if up_to_date:
-                logger.debug('GET\t%s\tin guild\t%s', name, guild_id)
                 todo[name].id = int(done[name]['id'])
+                logger.debug('GET\t%s\t%s\tin guild\t%s', name, todo[name].id, guild_id)
             else:
                 cmd_dict.pop('name') # can't pass this to PATCH
                 state['PATCH'].setdefault(guild_id, {})[name] \
@@ -1484,12 +1484,15 @@ class SlashBot(commands.Bot):
     async def _register_permissions(self, guild_id: int = None):
         app_info = self.app_info
         guild_path = f"/applications/{app_info.id}/guilds/{{0}}/commands/permissions"
-        guild_ids = {g.id for g in self.guilds} | {cmd.guild_id for cmd in self.slash}
-        guild_ids.discard(None)
+        all_guild_ids = {g.id for g in self.guilds} | {cmd.guild_id for cmd in self.slash}
+        all_guild_ids.discard(None)
         guilds: Dict[int, List[dict]] = {}
         for cmd in self.slash:
             defaults = cmd.perms_dict(None)
             if defaults['permissions']:
+                # don't set defaults in all guilds if the command itself
+                # is limited to only one guild
+                guild_ids = all_guild_ids if cmd.guild_id is None else {cmd.guild_id}
                 for gid in guild_ids:
                     # This is only for guilds that have no specific perms.
                     # Guilds that do have specific perms will have the default
@@ -1507,5 +1510,5 @@ class SlashBot(commands.Bot):
                 guilds.setdefault(gid, []).append(cmd.perms_dict(gid))
         for guild_id, data in guilds.items():
             route = _Route('PUT', guild_path.format(guild_id))
+            logger.debug('PUT\tpermissions for all commands\tin guild\t%s', guild_id)
             await self.http.request(route, json=data)
-            logger.debug('PUT guild\t%s\tpermissions', guild_id)
