@@ -393,7 +393,7 @@ class Context(discord.Object, _AsyncInit):
             self.command = self.command.slash[opt['name']]
             await self._kwargs_from_options(opt.get('options', []), resolved)
         elif isinstance(self.command, Command):
-            kwargs[self.command._ctx_arg] = self
+            kwargs[self.command._ctx_arg[0]] = self
             self.options = kwargs
 
     async def _try_get(
@@ -965,7 +965,7 @@ class Command(discord.Object):
                         'required argument with no valid annotation')
             try:
                 if issubclass(typ, Context):
-                    self._ctx_arg = param.name
+                    self._ctx_arg = (param.name, typ)
                 elif issubclass(typ, ChoiceEnum):
                     typ = Option(description=typ)
             except TypeError: # not even a class
@@ -1358,7 +1358,7 @@ class SlashBot(commands.Bot):
         if cmd is None:
             raise commands.CommandNotFound(
                 f'No command {event["data"]["name"]!r} found by any critera')
-        ctx = await cmd.coro.__annotations__[cmd._ctx_arg](self, cmd, event)
+        ctx: Context = await cmd._ctx_arg[1](self, cmd, event)
         self.dispatch('before_slash_command_invoke', ctx)
         try:
             await ctx.command.invoke(ctx)
