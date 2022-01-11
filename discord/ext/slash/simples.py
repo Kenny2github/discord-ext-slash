@@ -142,6 +142,21 @@ class ChoiceEnum(Enum):
     """
     pass
 
+class ButtonStyle(IntEnum):
+    """:class:`Button` appearance styles.
+
+    .. attribute:: PRIMARY
+    .. attribute:: SECONDARY
+    .. attribute:: SUCCESS
+    .. attribute:: DANGER
+    .. attribute:: LINK
+    """
+    PRIMARY = 1
+    SECONDARY = 2
+    SUCCESS = 3
+    DANGER = 4
+    LINK = 5
+
 class _Route(discord.http.Route):
     BASE = 'https://discord.com/api/v8'
 

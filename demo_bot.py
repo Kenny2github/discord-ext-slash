@@ -145,6 +145,20 @@ async def numbers(
         value = num1 / num2
     await ctx.respond(value, ephemeral=True)
 
+@client.slash_cmd()
+async def components(ctx: slash.Context):
+    """Send some message components?"""
+    await ctx.respond('Here are some components', components=[
+        slash.ActionRow(
+            slash.Button(slash.ButtonStyle.PRIMARY, 'A thing', custom_id='a thing'),
+            slash.Button(slash.ButtonStyle.LINK, 'A link', url='https://example.com')
+        ),
+        slash.ActionRow(slash.SelectMenu('a menu', [
+            slash.SelectOption('An option', 'an option'),
+            slash.SelectOption('A described option', 'another', 'It has a description.')
+        ]))
+    ])
+
 @client.slash_cmd(default_permission=False)
 async def stop(ctx: slash.Context):
     """Stop the bot."""

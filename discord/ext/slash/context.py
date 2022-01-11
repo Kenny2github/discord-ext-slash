@@ -3,6 +3,7 @@ from typing import Union, Any, Mapping, Optional, Iterable, TYPE_CHECKING
 import discord
 from discord.ext import commands
 from .logger import logger
+from .components import ActionRow
 from .simples import (
     _AsyncInit, _Route, ApplicationCommandOptionType, CallbackFlags,
     InteractionCallbackType, PartialMember, PartialTextChannel,
@@ -298,6 +299,7 @@ class Context(discord.Object, _AsyncInit):
     async def respond(
         self, content='', *, embed: discord.Embed = None,
         embeds: Iterable[discord.Embed] = None,
+        components: Iterable[ActionRow] = None,
         allowed_mentions: discord.AllowedMentions = None,
         file: discord.File = None, ephemeral: bool = False,
         deferred: bool = False, flags: Union[CallbackFlags, int] = None,
@@ -338,6 +340,8 @@ class Context(discord.Object, _AsyncInit):
             embeds = [embed]
         if embeds:
             embeds = [emb.to_dict() for emb, _ in zip(embeds, range(10))]
+        if components:
+            components = [comp.to_dict() for comp in components]
         mentions = self.client.allowed_mentions
         if mentions is not None and allowed_mentions is not None:
             mentions = mentions.merge(allowed_mentions)
@@ -349,6 +353,8 @@ class Context(discord.Object, _AsyncInit):
                 data['content'] = content
             if embeds:
                 data['embeds'] = embeds
+            if components:
+                data['components'] = components
             if mentions is not None:
                 data['allowed_mentions'] = mentions.to_dict()
             path = f"/webhooks/{self.client.app_info.id}/{self.token}" \
@@ -365,6 +371,8 @@ class Context(discord.Object, _AsyncInit):
                 raise ValueError('sending channel message with no content')
             if embeds:
                 data['data']['embeds'] = embeds
+            if components:
+                data['data']['components'] = components
             if mentions is not None:
                 data['data']['allowed_mentions'] = mentions.to_dict()
             if ephemeral:
