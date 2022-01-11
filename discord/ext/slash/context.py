@@ -5,7 +5,7 @@ from discord.ext import commands
 from .logger import logger
 from .simples import (
     _AsyncInit, _Route, ApplicationCommandOptionType, CallbackFlags,
-    InteractionResponseType, PartialMember, PartialTextChannel,
+    InteractionCallbackType, PartialMember, PartialTextChannel,
     PartialCategoryChannel, PartialVoiceChannel, PartialRole
 )
 if TYPE_CHECKING:
@@ -301,7 +301,7 @@ class Context(discord.Object, _AsyncInit):
         allowed_mentions: discord.AllowedMentions = None,
         file: discord.File = None, ephemeral: bool = False,
         deferred: bool = False, flags: Union[CallbackFlags, int] = None,
-        rtype: InteractionResponseType = InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE
+        rtype: InteractionCallbackType = InteractionCallbackType.CHANNEL_MESSAGE_WITH_SOURCE
     ):
         """Respond to the interaction. If called again, edits the response.
 
@@ -319,18 +319,18 @@ class Context(discord.Object, _AsyncInit):
             If other flags are present, they are preserved.
         :param bool deferred:
             Shortcut to setting ``rtype =``
-            :attr:`~InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE`.
+            :attr:`~InteractionCallbackType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE`.
             Overrides ``rtype`` unconditionally if :const:`True`.
         :param flags: Message flags, ORed together
         :type flags: Union[CallbackFlags, int]
-        :param InteractionResponseType rtype:
+        :param InteractionCallbackType rtype:
             The type of response to send. See that class's documentation.
 
         :raises TypeError: if both ``embed`` and ``embeds`` are specified.
         :raises ValueError: if sending channel message without content.
         """
         if deferred:
-            rtype = InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
+            rtype = InteractionCallbackType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
         content = str(content)
         if embed and embeds:
             raise TypeError('Cannot specify both embed and embeds')
@@ -361,7 +361,7 @@ class Context(discord.Object, _AsyncInit):
             }
             if content or embeds:
                 data['data'] = {'content': content}
-            elif rtype == InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE:
+            elif rtype == InteractionCallbackType.CHANNEL_MESSAGE_WITH_SOURCE:
                 raise ValueError('sending channel message with no content')
             if embeds:
                 data['data']['embeds'] = embeds

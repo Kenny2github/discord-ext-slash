@@ -4,7 +4,7 @@ import asyncio
 import discord
 from discord.ext import commands
 from .logger import logger
-from .simples import SlashWarning, _Route
+from .simples import InteractionType, SlashWarning, _Route
 from .command import Command, Group
 from .context import Context
 
@@ -118,6 +118,9 @@ class SlashBot(commands.Bot):
                 ', please open an issue for this: '
                 'https://github.com/Kenny2github/discord-ext-slash/issues/new')
         logger.debug('%s', event)
+        if event['type'] != InteractionType.APPLICATION_COMMAND:
+            logger.debug('Ignoring non-slash command in main handler')
+            return
         cmd = discord.utils.get(self.slash, id=int(event['data']['id']))
         if cmd is None:
             warn(f'No command {event["data"]["name"]!r} found '

@@ -66,7 +66,7 @@ Enums
 
 .. autoclass:: ApplicationCommandOptionType
 .. autoclass:: ApplicationCommandPermissionType
-.. autoclass:: InteractionResponseType
+.. autoclass:: InteractionCallbackType
 .. autoclass:: CallbackFlags
 .. autoclass:: MessageFlags
 .. autoclass:: ChoiceEnum

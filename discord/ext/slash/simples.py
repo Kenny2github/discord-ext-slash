@@ -65,32 +65,64 @@ class ApplicationCommandPermissionType(IntEnum):
     ROLE = 1
     USER = 2
 
-class InteractionResponseType(IntEnum):
+class InteractionType(IntEnum):
+    """Possible types of interaction.
+
+    .. attribute:: PING
+
+        Only used in webhook-based interactions.
+        Included only for completeness.
+    .. attribute:: APPLICATION_COMMAND
+
+        A :class:`Command` interaction.
+    .. attribute:: MESSAGE_COMPONENT
+
+        An interaction from a :class:`Button` or :class:`SelectMenu`.
+    .. attribute:: APPLICATION_COMMAND_AUTOCOMPLETE
+
+        An interaction for autocompleting :class:`Option` values.
+    """
+    PING = 1
+    APPLICATION_COMMAND = 2
+    MESSAGE_COMPONENT = 3
+    APPLICATION_COMMAND_AUTOCOMPLETE = 4
+
+class InteractionCallbackType(IntEnum):
     """Possible ways to respond to an interaction.
     For use in :meth:`Context.respond`.
 
     .. attribute:: PONG
 
-        Only used to ACK a Ping, never valid here.
+        Only used to ACK a :attr:`InteractionType.PING`, never valid here.
         Included only for completeness.
     .. attribute:: CHANNEL_MESSAGE_WITH_SOURCE
 
-        Show user input and send a message. Default.
+        Show user input and send a message. Default for slash commands.
     .. attribute:: DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
 
         Show user input and display a "waiting for bot" system message.
         Send a response with this type and edit the response later if you
         need to do some asynchronous fetch or something.
+    .. attribute:: DEFERRED_UPDATE_MESSAGE
+
+        ACK a component interaction and edit the original message later.
+        The user does not see a loading state.
+    .. attribute:: UPDATE_MESSAGE
+
+        Edit the original message a component is attached.
+    .. attribute:: APPLICATION_COMMAND_AUTOCOMPLETE_RESULT
+
+        Respond with autocomplete suggestions.
     """
     # ACK a Ping
-    Pong = PONG = 1
-    # Respond immediately to an interaction
-    CHANNEL_MESSAGE_WITH_SOURCE = ChannelMessageWithSource = 4
-    # ACK an interaction and send a response later
-    DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = DeferredChannelMessageWithSource = 5
-    # ACK a command without sending a message, showing the user's input
-    # (Former name and description, now renamed)
-    AcknowledgeWithSource = DeferredChannelMessageWithSource
+    PONG = 1
+    CHANNEL_MESSAGE_WITH_SOURCE = 4
+    DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = 5
+    DEFERRED_UPDATE_MESSAGE = 6
+    UPDATE_MESSAGE = 7
+    APPLICATION_COMMAND_AUTOCOMPLETE_RESULT = 8
+
+InteractionResponseType = InteractionCallbackType
 
 class CallbackFlags(IntFlag):
     """Flags to pass to the ``flags`` argument of :meth:`Context.respond`.

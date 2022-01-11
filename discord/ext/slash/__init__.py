@@ -54,8 +54,8 @@ See the `docs <https://discord-ext-slash.rtfd.io>`_.
 from __future__ import annotations
 from .simples import (
     SlashWarning, ApplicationCommandOptionType,
-    ApplicationCommandPermissionType, InteractionResponseType,
-    CallbackFlags, ChoiceEnum
+    ApplicationCommandPermissionType, InteractionType, InteractionResponseType,
+    InteractionCallbackType, CallbackFlags, ChoiceEnum
 )
 from .option import Option, Choice
 from .command import (
@@ -69,7 +69,8 @@ __all__ = [
     'SlashWarning',
     'ApplicationCommandOptionType',
     'ApplicationCommandPermissionType',
-    'InteractionResponseType',
+    'InteractionType',
+    'InteractionCallbackType',
     'CallbackFlags',
     'ChoiceEnum',
     'Context',
