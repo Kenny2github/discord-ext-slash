@@ -59,6 +59,7 @@ class BaseContext(discord.Object, _AsyncInit):
         The bot.
     """
 
+    cog = None # our cogs aren't d.py cogs, so hide them from d.py
     id: int
     guild: Union[discord.Guild, discord.Object, None]
     channel: Union[discord.TextChannel, discord.Object, None]
