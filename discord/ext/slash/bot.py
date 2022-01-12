@@ -53,7 +53,7 @@ class SlashBot(commands.Bot):
         Create a :class:`Group` with the decorated coroutine and ``**kwargs``
         and add it to :attr:`slash`.
 
-    .. decoratormethod:: component_callback(matcher, ttl, **kwargs)
+    .. decoratormethod:: component_callback(matcher, ttl=15min, **kwargs)
 
         Create a :class:`ComponentCallback` with the decorated coroutine
         and ``**kwargs`` and add it to :attr:`comp_callbacks`.

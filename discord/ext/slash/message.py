@@ -3,7 +3,7 @@ import discord
 from .components import MessageComponent
 
 class ComponentedMessage(discord.Message):
-    """Monkeypatch discord.py's Message to include components."""
+    """Monkeypatch :class:`discord.Message` to include components."""
 
     __slots__ = discord.Message.__slots__ + ('components',)
 

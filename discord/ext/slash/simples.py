@@ -146,10 +146,20 @@ class ButtonStyle(IntEnum):
     """:class:`Button` appearance styles.
 
     .. attribute:: PRIMARY
+
+        Blurple primary-action button.
     .. attribute:: SECONDARY
+
+        Gray secondary-action button.
     .. attribute:: SUCCESS
+
+        Green confirmation button.
     .. attribute:: DANGER
+
+        Red destructive-action button.
     .. attribute:: LINK
+
+        Gray link button with link icon.
     """
     PRIMARY = 1
     SECONDARY = 2

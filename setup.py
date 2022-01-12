@@ -9,7 +9,7 @@ with open(os.path.join(os.path.dirname(__file__),
 longdesc = match('^([\'"])\\1{2}(.*?)\\1{3}', contents, S).group(2)
 version = match(r'[\s\S]*__version__[^\'"]+[\'"]([^\'"]+)[\'"]', contents).group(1)
 del contents
-longdesc = sub(':class:`~?([^`]+)`', r'``\1``', longdesc)
+longdesc = sub(':(?:class|attr):`~?([^`]+)`', r'``\1``', longdesc)
 
 with open(os.path.join(os.path.dirname(__file__),
                        'README.rst'), 'w') as f2:

@@ -29,7 +29,7 @@ class MessageComponent:
         return {'type': self.type}
 
 class ActionRow(MessageComponent):
-    """A container for other components.
+    r"""A container for other components.
 
     This can be instantiated either like
     ``ActionRow(component1, component2)``
@@ -39,9 +39,9 @@ class ActionRow(MessageComponent):
         The first of one or multiple subcomponents, *or*
         an iterable of subcomponents.
     :type first: Union[Button, SelectMenu, Iterable[Button]]
-    :param *args:
+    :param \*args:
         The rest of the subcomponents, if ``first`` is the first.
-    :type *args: Button
+    :type \*args: Button
 
     .. attribute:: components
         :type: list[Union[Button, SelectMenu]]
@@ -170,6 +170,16 @@ class Button(MessageComponent):
 
 class SelectMenu(MessageComponent):
     """A select menu for picking from choices.
+
+    When using this component, the values selected will be passed to the
+    callback as variable-count arguments, which must be received like so:
+
+    .. code-block:: python
+
+        @callback(menu_id)
+        async def menu_callback(ctx: ComponentContext, *values: str):
+            # values are now the string values of the options
+            # specified on the select menu
 
     .. attribute:: custom_id
         :type: str

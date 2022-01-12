@@ -540,6 +540,10 @@ class ComponentContext(BaseContext):
     Attributes described below are in addition or in place of
     those defined in :class:`BaseContext`.
 
+    .. attribute:: message
+        :type: ComponentedMessage
+
+        The message that the component is attached to.
     .. attribute:: command
         :type: Optional[ComponentCallback]
 
