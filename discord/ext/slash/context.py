@@ -177,7 +177,7 @@ class BaseContext(discord.Object, _AsyncInit):
     async def _fetch_member(self, mid):
         return await self.guild.fetch_member(mid)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'<Interaction id={self.id}>'
 
     def _message_data(
