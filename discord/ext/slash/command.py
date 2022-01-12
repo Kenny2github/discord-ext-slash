@@ -16,7 +16,29 @@ from .context import BaseContext, Context
 CheckCoro = Callable[[BaseContext], Coroutine[Any, Any, bool]]
 CallbackCoro = Callable[..., Coroutine[None, None, None]]
 
-class Command(discord.Object):
+class BaseCallback(discord.Object):
+    """Base class for a callback invoked by an interaction."""
+    cog = None
+    coro: CallbackCoro
+
+    def __init__(self, coro: CallbackCoro,
+                 check: CheckCoro = None):
+        self.coro = coro
+        async def _default_check(ctx: BaseContext) -> bool:
+            return True
+        self._check = check or _default_check
+
+    def __hash__(self) -> int:
+        raise NotImplementedError('Callbacks must be hashable to be in a set.')
+
+    def check(self, coro: CheckCoro) -> CheckCoro:
+        self._check = coro
+        return coro
+
+    def invoke(self, ctx: BaseContext) -> None:
+        raise NotImplementedError('Callbacks must be invokable.')
+
+class Command(BaseCallback):
     """Represents a slash command.
 
     The following constructor argument does not map to an attribute:
@@ -108,6 +130,7 @@ class Command(discord.Object):
     permissions: CommandPermissionsDict
 
     def __init__(self, coro: CallbackCoro, **kwargs):
+        super().__init__(coro, kwargs.pop('check', None))
         self.id = None
         self.name = kwargs.pop('name', coro.__name__)
         self.description = kwargs.pop('description', coro.__doc__)
@@ -161,10 +184,6 @@ class Command(discord.Object):
                     typ.name = param.name
         if self._ctx_arg is None:
             raise ValueError('One argument must be type-hinted slash.Context')
-        self.coro = coro
-        async def check(*args, **kwargs):
-            pass
-        self._check = kwargs.pop('check', check)
 
     @property
     def qualname(self) -> str:
@@ -263,22 +282,19 @@ class Command(discord.Object):
                     'Must specify guild_id if target is not a guilded object')
         self.permissions.setdefault(guild_id, {})[target.id, type] = perm
 
-    async def invoke(self, ctx: Context):
+    async def invoke(self, ctx: Context) -> None:
         if not await self.can_run(ctx):
             raise commands.CheckFailure(
                 f'The check functions for {self.qualname} failed.')
         logger.debug('User %s running, in guild %s channel %s, command: %s',
-                     ctx.author.id, ctx.guild or ctx.guild.id, ctx.channel.id,
-                     ctx.command.qualname)
+                     ctx.author and ctx.author.id,
+                     ctx.guild and ctx.guild.id,
+                     ctx.channel.id, ctx.command.qualname)
         await self.invoke_parents(ctx)
         if self.cog is not None:
             await self.coro(self.cog, **ctx.options)
         else:
             await self.coro(**ctx.options)
-
-    def check(self, coro: CheckCoro) -> CheckCoro:
-        self._check = coro
-        return coro
 
     async def can_run(self, ctx: Context) -> bool:
         parents = []  # highest level parent last
