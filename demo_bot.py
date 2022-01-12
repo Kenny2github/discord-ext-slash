@@ -1,6 +1,7 @@
 import os
 import logging
 import asyncio
+from typing import List
 import discord
 from discord.ext import slash
 
@@ -145,19 +146,50 @@ async def numbers(
         value = num1 / num2
     await ctx.respond(value, ephemeral=True)
 
+def construct_rows(button_id: str, menu_id: str,
+                   count: int) -> List[slash.ActionRow]:
+    return [
+        slash.ActionRow(
+            slash.Button(slash.ButtonStyle.PRIMARY,
+                         f'A thing', custom_id=button_id),
+            slash.Button(slash.ButtonStyle.LINK, 'A link',
+                         url='https://example.com')
+        ),
+        slash.ActionRow(slash.SelectMenu(menu_id, [
+            slash.SelectOption('An option', 'an option'),
+            slash.SelectOption('A described option',
+                               'another', 'It has a description.')
+        ], placeholder=f'Choose an option. {count} use(s) left.'))
+    ]
+
 @client.slash_cmd()
 async def components(ctx: slash.Context):
     """Send some message components?"""
-    await ctx.respond('Here are some components', components=[
-        slash.ActionRow(
-            slash.Button(slash.ButtonStyle.PRIMARY, 'A thing', custom_id='a thing'),
-            slash.Button(slash.ButtonStyle.LINK, 'A link', url='https://example.com')
-        ),
-        slash.ActionRow(slash.SelectMenu('a menu', [
-            slash.SelectOption('An option', 'an option'),
-            slash.SelectOption('A described option', 'another', 'It has a description.')
-        ]))
-    ])
+    common_prefix = f'{ctx.id}: '
+    button_id = common_prefix + 'button'
+    menu_id = common_prefix + 'menu'
+
+    def check_author(context: slash.ComponentContext) -> bool:
+        """Only listen to component interactions from the command sender."""
+        return context.author.id == ctx.author.id
+
+    @client.component_callback(button_id, check=check_author)
+    async def button_callback(ctx: slash.ComponentContext):
+        """Respond to the "A thing" button being pressed."""
+        # send a new message in response to the button press
+        await ctx.respond(
+            'Hi! You did a thing!', ephemeral=True,
+            rtype=slash.InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE)
+
+    @client.component_callback(menu_id, check=check_author, max_uses=5)
+    async def menu_callback(ctx: slash.ComponentContext, *values: str):
+        """Respond to the menu being chosen."""
+        # edit the original message to update the components
+        await ctx.respond(f'You chose: `{values}`', components=construct_rows(
+            button_id, menu_id, ctx.command.max_uses))
+
+    await ctx.respond('Here are some components!', components=construct_rows(
+        button_id, menu_id, 5))
 
 @client.slash_cmd()
 async def code(ctx: slash.Context):
@@ -178,6 +210,10 @@ async def on_slash_permissions():
 @client.event
 async def on_before_slash_command_invoke(ctx: slash.Context):
     logger.info('User %s running /%s', ctx.author, ctx.command)
+
+@client.event
+async def on_before_component_callback_invoke(ctx: slash.ComponentContext):
+    logger.info('%r is happening by %s', ctx.custom_id, ctx.author)
 
 # show extension logs
 logger = logging.getLogger('discord.ext.slash')
