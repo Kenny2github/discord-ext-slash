@@ -14,6 +14,11 @@ class MessageComponent:
     """
     type: int
 
+    @classmethod
+    def from_dict(cls, data: dict) -> MessageComponent:
+        """Construct this component from a dictionary."""
+        return TYPE_CLASSES[data['type']].from_dict(data)
+
     def to_dict(self) -> dict:
         """Render this component to a dictionary."""
         return {'type': self.type}
@@ -40,6 +45,13 @@ class ActionRow(MessageComponent):
     type = 1
 
     components: List[NonActionRow]
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ActionRow:
+        data.pop('type', None)
+        data['components'] = [MessageComponent.from_dict(comp)
+                              for comp in data['components']]
+        return cls(**data)
 
     def __init__(
         self,
@@ -97,6 +109,14 @@ class Button(MessageComponent):
     custom_id: Optional[str] = None
     url: Optional[str] = None
     disabled: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Button:
+        data.pop('type', None)
+        data['style'] = ButtonStyle(data['style'])
+        if 'emoji' in data:
+            data['emoji'] = discord.PartialEmoji.from_dict(data['emoji'])
+        return cls(**data)
 
     def __init__(
         self,
@@ -182,6 +202,13 @@ class SelectMenu(MessageComponent):
     max_values: int = 1
     disabled: bool = False
 
+    @classmethod
+    def from_dict(cls, data: dict) -> SelectMenu:
+        data.pop('type', None)
+        data['options'] = [SelectOption.from_dict(opt)
+                           for opt in data['options']]
+        return cls(**data)
+
     def __init__(
         self,
         custom_id: str, options: Iterable[SelectOption],
@@ -238,6 +265,12 @@ class SelectOption:
     description: Optional[str] = None
     emoji: Optional[discord.PartialEmoji] = None
     default: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict) -> SelectOption:
+        if 'emoji' in data:
+            data['emoji'] = discord.PartialEmoji.from_dict(data['emoji'])
+        return cls(**data)
 
     def to_dict(self) -> dict:
         result = {
