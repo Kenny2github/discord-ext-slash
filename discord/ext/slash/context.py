@@ -3,7 +3,7 @@ from typing import Union, Any, Mapping, Optional, Iterable, List, TYPE_CHECKING
 import discord
 from discord.ext import commands
 from .logger import logger
-from .components import ActionRow, SelectOption
+from .components import ActionRow
 from .simples import (
     _AsyncInit, _Route, ApplicationCommandOptionType, CallbackFlags,
     InteractionCallbackType, PartialMember, PartialTextChannel,
@@ -525,15 +525,14 @@ class ComponentContext(BaseContext):
     # TODO: message attr
     custom_id: str
     component_type: int
-    values: List[SelectOption] = []
+    values: List[str] = []
 
     async def __init__(self, client: SlashBot,
                        cmd: ComponentCallback, event: dict):
         await super().__init__(client, cmd, event)
-        self.custom_id = event['custom_id']
-        self.component_type = event['component_type']
-        self.values = [SelectOption.from_dict(opt)
-                       for opt in event.get('values', [])]
+        self.custom_id = event['data']['custom_id']
+        self.component_type = event['data']['component_type']
+        self.values = event['data'].get('values', [])
 
     def _rtype_defaults(self, rtype: InteractionCallbackType,
                               deferred: bool = False) -> InteractionCallbackType:
