@@ -19,6 +19,12 @@ class MessageComponent:
         """Construct this component from a dictionary."""
         return TYPE_CLASSES[data['type']].from_dict(data)
 
+    @staticmethod
+    def clean_data(data: dict) -> None:
+        """Remove extraneous dictionary keys."""
+        data.pop('type', None)
+        data.pop('hash', None)
+
     def to_dict(self) -> dict:
         """Render this component to a dictionary."""
         return {'type': self.type}
@@ -48,9 +54,9 @@ class ActionRow(MessageComponent):
 
     @classmethod
     def from_dict(cls, data: dict) -> ActionRow:
-        data.pop('type', None)
-        data['components'] = [MessageComponent.from_dict(comp)
-                              for comp in data['components']]
+        cls.clean_data(data)
+        data['first'] = [MessageComponent.from_dict(comp)
+                         for comp in data.pop('components', [])]
         return cls(**data)
 
     def __init__(
@@ -112,7 +118,7 @@ class Button(MessageComponent):
 
     @classmethod
     def from_dict(cls, data: dict) -> Button:
-        data.pop('type', None)
+        cls.clean_data(data)
         data['style'] = ButtonStyle(data['style'])
         if 'emoji' in data:
             data['emoji'] = discord.PartialEmoji.from_dict(data['emoji'])
@@ -204,7 +210,7 @@ class SelectMenu(MessageComponent):
 
     @classmethod
     def from_dict(cls, data: dict) -> SelectMenu:
-        data.pop('type', None)
+        cls.clean_data(data)
         data['options'] = [SelectOption.from_dict(opt)
                            for opt in data['options']]
         return cls(**data)
