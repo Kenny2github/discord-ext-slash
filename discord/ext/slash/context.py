@@ -325,7 +325,7 @@ class BaseContext(discord.Object, _AsyncInit):
             path = f"/webhooks/{self.client.app_info.id}/{self.token}" \
                 "/messages/@original"
             route = _Route('PATCH', path, channel_id=self.channel.id,
-                           guild_id=self.guild or self.guild.id)
+                           guild_id=self.guild and self.guild.id)
         else:
             # send a new response
             data = {
@@ -347,7 +347,7 @@ class BaseContext(discord.Object, _AsyncInit):
                 data.setdefault('data', {})['flags'] = int(flags)
             path = f"/interactions/{self.id}/{self.token}/callback"
             route = _Route('POST', path, channel_id=self.channel.id,
-                           guild_id=self.guild or self.guild.id)
+                           guild_id=self.guild and self.guild.id)
         if isinstance(msg_data, list):
             # the payload json should have been finalized by now
             msg_data[0]['value'] = discord.utils.to_json(msg_data[0]['value'])
@@ -360,7 +360,7 @@ class BaseContext(discord.Object, _AsyncInit):
         path = f"/webhooks/{self.client.app_info.id}/{self.token}" \
             "/messages/@original"
         route = _Route('DELETE', path, channel_id=self.channel.id,
-                       guild_id=self.guild or self.guild.id)
+                       guild_id=self.guild and self.guild.id)
         await self.client.http.request(route)
 
     async def send(self, *args, **kwargs):
