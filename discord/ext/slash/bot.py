@@ -5,7 +5,7 @@ import discord
 from discord.ext import commands
 from .logger import logger
 from .simples import InteractionType, SlashWarning, _Route
-from .command import Command, Group
+from .command import Command, Group, cmd, group
 from .context import Context
 
 class SlashBot(commands.Bot):
@@ -77,8 +77,14 @@ class SlashBot(commands.Bot):
         return decorator
 
     def add_slash(self, func, **kwargs):
-        """Non-decorator version of :meth:`slash_cmd`."""
-        self.slash_cmd(**kwargs)(func)
+        """Non-decorator version of :meth:`slash_cmd`.
+
+        If ``func`` is a :class:`Command` it will be directly added.
+        """
+        if isinstance(func, Command):
+            self.slash.add(func)
+        else:
+            self.slash_cmd(**kwargs)(func)
 
     def slash_group(self, **kwargs):
         def decorator(func):
