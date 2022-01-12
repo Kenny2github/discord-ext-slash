@@ -520,6 +520,32 @@ class Context(BaseContext):
 Interaction = Context
 
 class ComponentContext(BaseContext):
+    """Object representing a message component interaction.
+
+    Attributes described below are in addition or in place of
+    those defined in :class:`BaseContext`.
+
+    .. attribute:: command
+        :type: Optional[ComponentCallback]
+
+        The interaction callback being run; or in matcher functions,
+        the callback being considered for running.
+    .. attribute:: custom_id
+        :type: str
+
+        The custom ID of the component triggering the interaction.
+    .. attribute:: component_type
+        :type: int
+
+        The numerical component type of the component. You should not need
+        this in normal code - the custom_id should be the most you need to
+        identify a specific component object.
+    .. attribute:: values
+        :type: list[str]
+
+        For :class:`SelectMenu` components, this is the list of option values
+        chosen by the user.
+    """
     command: ComponentCallback # override base
     # specific to message components
     # TODO: message attr
