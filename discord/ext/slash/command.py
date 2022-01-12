@@ -1,7 +1,8 @@
 from __future__ import annotations
 import sys
-from typing import Any, Callable, Coroutine, Optional, Mapping, Union, Dict, Tuple
-from functools import partial
+from typing import (
+    Any, Callable, Coroutine, Optional, Mapping, Union, Dict, Tuple)
+from functools import partial, wraps
 from inspect import signature, iscoroutinefunction
 import discord
 from discord.ext import commands
@@ -27,14 +28,20 @@ class BaseCallback(discord.Object):
         self.coro = coro
         async def _default_check(ctx: BaseContext) -> bool:
             return True
-        self._check = check or _default_check
+        self.check(check or _default_check)
 
     def __hash__(self) -> int:
         raise NotImplementedError('Callbacks must be hashable to be in a set.')
 
     def check(self, coro: CheckCoro) -> CheckCoro:
-        self._check = coro
-        return coro
+        if iscoroutinefunction(coro):
+            self._check = coro
+            return coro
+        @wraps(coro)
+        async def _async_check(ctx: BaseContext) -> bool:
+            return coro(ctx)
+        self._check = _async_check
+        return _async_check
 
     def invoke(self, ctx: BaseContext) -> None:
         raise NotImplementedError('Callbacks must be invokable.')
