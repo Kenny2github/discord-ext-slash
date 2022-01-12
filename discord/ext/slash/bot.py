@@ -1,12 +1,14 @@
-from typing import Set, List, Dict
+from typing import Set, List, Dict, Optional
 from warnings import warn
 import asyncio
 import discord
 from discord.ext import commands
 from .logger import logger
 from .simples import InteractionType, SlashWarning, _Route
-from .command import BaseCallback, Command, ComponentCallback, Group
+from .command import Command, ComponentCallback, Group
 from .context import BaseContext, ComponentContext, Context
+
+DEFAULT_TTL = 15*60 # 15 minutes, matches slash command token expiry
 
 class SlashBot(commands.Bot):
     """A bot that supports slash commands.
@@ -51,10 +53,17 @@ class SlashBot(commands.Bot):
         Create a :class:`Group` with the decorated coroutine and ``**kwargs``
         and add it to :attr:`slash`.
 
-    .. decoratormethod:: component_callback(matcher, **kwargs)
+    .. decoratormethod:: component_callback(matcher, ttl, **kwargs)
 
         Create a :class:`ComponentCallback` with the decorated coroutine
         and ``**kwargs`` and add it to :attr:`comp_callbacks`.
+
+        :param float ttl:
+            Wait this long after registering the callback, and then
+            deregister it. Default value is 15 minutes. Set to :const:`None`
+            to disable autoderegistration, but if doing so make sure to clean
+            up the callbacks after you're done using them by calling
+            :meth:`ComponentCallback.deregister`.
     """
 
     slash: Set[Command]
@@ -125,25 +134,34 @@ class SlashBot(commands.Bot):
                 obj.cog = cog
                 self.comp_callbacks.add(obj)
 
-    def component_callback(self, matcher, **kwargs):
+    async def wait_and_deregister(
+        self, callback: ComponentCallback, ttl: Optional[float]
+    ) -> None:
+        if ttl is not None:
+            await asyncio.sleep(ttl)
+            callback.deregister(self)
+
+    def component_callback(self, matcher, ttl=DEFAULT_TTL, **kwargs):
         def decorator(func):
             callback = ComponentCallback(func, matcher, **kwargs)
             self.comp_callbacks.add(callback)
+            asyncio.create_task(self.wait_and_deregister(callback, ttl))
             return callback
         return decorator
 
-    def add_component_callback(self, func, matcher=None, **kwargs):
+    def add_component_callback(self, func, matcher=None, ttl=DEFAULT_TTL, **kwargs):
         """Non-decorator version of :meth:`component_callback`.
 
         If ``func`` is a :class:`ComponentCallback` it will be directly added.
         """
         if isinstance(func, ComponentCallback):
             self.comp_callbacks.add(func)
+            asyncio.create_task(self.wait_and_deregister(func, ttl))
         elif matcher is None:
             raise TypeError('matcher is a required argument '
                             'when not adding a premade callback')
         else:
-            self.component_callback(matcher, **kwargs)(func)
+            self.component_callback(matcher, ttl, **kwargs)(func)
 
     async def application_info(self):
         """Equivalent to :meth:`discord.Client.application_info`, but
