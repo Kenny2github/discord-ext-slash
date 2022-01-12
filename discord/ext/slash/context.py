@@ -33,12 +33,14 @@ class Context(discord.Object, _AsyncInit):
         Can be an :class:`~discord.Object` with just the ID
         if the client is not in the guild.
     .. attribute:: author
-        :type: discord.Member
+        :type: Union[discord.Member, discord.User]
 
         The user who ran the command.
         If :attr:`guild` is an :class:`~discord.Object`, a lot of
         :class:`~discord.Member` methods that require the guild will break
         and should not be relied on.
+        If :attr:`guild` is :const:`None` then the command was run in DMs
+        and this object will be a :class:`~discord.User` instead.
     .. attribute:: command
         :type: Command
 
@@ -67,7 +69,7 @@ class Context(discord.Object, _AsyncInit):
     id: int
     guild: Union[discord.Guild, discord.Object, None]
     channel: Union[discord.TextChannel, discord.Object]
-    author: Union[discord.Member, PartialMember, None]
+    author: Union[discord.Member, PartialMember, discord.User, None]
     command: Union[Command, Group]
     options: Mapping[str, Any]
     me: Union[discord.Member, discord.Object]
@@ -97,13 +99,19 @@ class Context(discord.Object, _AsyncInit):
         self.channel = await self._try_get(
             discord.Object(event['channel_id']), self.client.get_channel,
             self.client.fetch_channel, 'channel')
-        if event.get('member', None):
+        if event.get('member'):
             author = PartialMember(
                 data=event['member'], guild=self.guild,
                 state=self.client._connection)
             self.author = await self._try_get(
                 author, self._get_member,
                 self._fetch_member, 'author-member')
+        elif event.get('user'):
+            author = discord.User(
+                state=self.client._connection, data=event['user'])
+            self.author = await self._try_get(
+                author, self.client.get_user,
+                self.client.fetch_user, 'author-user')
         else:
             self.author = None
         self.token = event['token']
@@ -354,7 +362,7 @@ class Context(discord.Object, _AsyncInit):
             path = f"/webhooks/{self.client.app_info.id}/{self.token}" \
                 "/messages/@original"
             route = _Route('PATCH', path, channel_id=self.channel.id,
-                           guild_id=self.guild.id)
+                           guild_id=self.guild or self.guild.id)
         else:
             data = {
                 'type': int(rtype)
@@ -373,7 +381,7 @@ class Context(discord.Object, _AsyncInit):
                 data.setdefault('data', {})['flags'] = int(flags)
             path = f"/interactions/{self.id}/{self.token}/callback"
             route = _Route('POST', path, channel_id=self.channel.id,
-                           guild_id=self.guild.id)
+                           guild_id=self.guild or self.guild.id)
             self.webhook = discord.Webhook.partial(
                 id=self.client.app_info.id, token=self.token, adapter=
                 discord.AsyncWebhookAdapter(self.client.http._HTTPClient__session))
@@ -396,7 +404,7 @@ class Context(discord.Object, _AsyncInit):
         path = f"/webhooks/{self.client.app_info.id}/{self.token}" \
             "/messages/@original"
         route = _Route('DELETE', path, channel_id=self.channel.id,
-                       guild_id=self.guild.id)
+                       guild_id=self.guild or self.guild.id)
         await self.client.http.request(route)
 
     async def send(self, *args, **kwargs):

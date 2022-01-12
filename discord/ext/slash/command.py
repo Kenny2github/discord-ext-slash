@@ -265,7 +265,7 @@ class Command(discord.Object):
             raise commands.CheckFailure(
                 f'The check functions for {self.qualname} failed.')
         logger.debug('User %s running, in guild %s channel %s, command: %s',
-                     ctx.author.id, ctx.guild.id, ctx.channel.id,
+                     ctx.author.id, ctx.guild or ctx.guild.id, ctx.channel.id,
                      ctx.command.qualname)
         await self.invoke_parents(ctx)
         if self.cog is not None:
