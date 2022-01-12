@@ -1,6 +1,6 @@
 from __future__ import annotations
 import sys
-from typing import Coroutine, Optional, Mapping, Union, Dict, Tuple
+from typing import Any, Callable, Coroutine, Optional, Mapping, Union, Dict, Tuple
 from functools import partial
 from inspect import signature
 import discord
@@ -13,6 +13,7 @@ from .simples import (
 from .option import Option
 from .context import Context
 
+CheckCoro = Callable[[Context], Coroutine[Any, Any, bool]]
 CallbackCoro = Callable[..., Coroutine[None, None, None]]
 
 class Command(discord.Object):
@@ -172,17 +173,17 @@ class Command(discord.Object):
             return self.name
         return self.parent.qualname + ' ' + self.name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.qualname
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.name, self.guild_id))
 
     def _to_dict_common(self, data: dict):
         if self.parent is None:
             data['default_permission'] = self.default_permission
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         data = {
             'name': self.name,
             'description': self.description
@@ -192,7 +193,7 @@ class Command(discord.Object):
         self._to_dict_common(data)
         return data
 
-    def perms_dict(self, guild_id: Optional[int]):
+    def perms_dict(self, guild_id: Optional[int]) -> dict:
         perms = []
         final = self.permissions.get(None, {}).copy()
         final.update(self.permissions.get(guild_id, {}).items())
@@ -262,7 +263,7 @@ class Command(discord.Object):
                     'Must specify guild_id if target is not a guilded object')
         self.permissions.setdefault(guild_id, {})[target.id, type] = perm
 
-    async def invoke(self, ctx):
+    async def invoke(self, ctx: Context):
         if not await self.can_run(ctx):
             raise commands.CheckFailure(
                 f'The check functions for {self.qualname} failed.')
@@ -275,11 +276,11 @@ class Command(discord.Object):
         else:
             await self.coro(**ctx.options)
 
-    def check(self, coro):
+    def check(self, coro: CheckCoro) -> CheckCoro:
         self._check = coro
         return coro
 
-    async def can_run(self, ctx):
+    async def can_run(self, ctx: Context) -> bool:
         parents = []  # highest level parent last
         cogs = []
         parent = self.parent
@@ -301,7 +302,7 @@ class Command(discord.Object):
                 return False
         return True
 
-    async def invoke_parents(self, ctx):
+    async def invoke_parents(self, ctx: Context):
         parents = []
         parent = self.parent
         while parent is not None:
