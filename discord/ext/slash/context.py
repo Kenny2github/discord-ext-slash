@@ -58,6 +58,10 @@ class BaseContext(discord.Object, _AsyncInit):
         :type: SlashBot
 
         The bot.
+    .. attribute:: webhook
+        :type: discord.Webhook
+
+        Webhook used for sending followup messages.
     """
 
     cog = None # our cogs aren't d.py cogs, so hide them from d.py
@@ -68,7 +72,7 @@ class BaseContext(discord.Object, _AsyncInit):
     command: BaseCallback
     me: Union[discord.Member, discord.Object]
     client: SlashBot
-    webhook: Optional[discord.Webhook]
+    webhook: discord.Webhook
 
     @property
     def bot(self) -> SlashBot:
@@ -115,7 +119,13 @@ class BaseContext(discord.Object, _AsyncInit):
         self.me = await self._try_get(
             discord.Object(self.client.user.id), self._get_member,
             self._fetch_member, 'me-member')
-        self.webhook = None
+        self.webhook = discord.Webhook.partial(
+            id=self.client.app_info.id, token=self.token, adapter=
+            discord.AsyncWebhookAdapter(self.client.http._HTTPClient__session))
+        self.sent_responses = {
+            'message': False,
+            'update': False,
+        }
 
     async def _try_get(
         self, default, get_method, fetch_method, typename, *,
@@ -244,6 +254,17 @@ class BaseContext(discord.Object, _AsyncInit):
                         deferred: bool = False) -> InteractionCallbackType:
         raise NotImplementedError('Contexts must have rtype defaults')
 
+    def _responded(self, rtype: InteractionCallbackType) -> bool:
+        if rtype == InteractionCallbackType.CHANNEL_MESSAGE_WITH_SOURCE:
+            return self.sent_responses['message']
+        if rtype == InteractionCallbackType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE:
+            return self.sent_responses['message']
+        if rtype == InteractionCallbackType.UPDATE_MESSAGE:
+            return self.sent_responses['update']
+        if rtype == InteractionCallbackType.DEFERRED_UPDATE_MESSAGE:
+            return self.sent_responses['update']
+        return True # for unknown rtypes, err on the side of editing
+
     async def respond(
         self, content='', *, rtype: InteractionCallbackType = None,
         embed: discord.Embed = None, embeds: Iterable[discord.Embed] = None,
@@ -292,12 +313,13 @@ class BaseContext(discord.Object, _AsyncInit):
         :raises ValueError: if sending channel message without content.
         """
         rtype = self._rtype_defaults(rtype, deferred)
+        responded = self._responded(rtype)
         msg_data = self._message_data(
             content=content, embed=embed, embeds=embeds, components=components,
             allowed_mentions=allowed_mentions, file=file, files=files)
         if isinstance(file, discord.File):
             files = [file]
-        if self.webhook is not None:
+        if responded:
             # update the original message - an edit
             data = msg_data  # if data gets used, msg_data is not a list
             path = f"/webhooks/{self.client.app_info.id}/{self.token}" \
@@ -326,9 +348,6 @@ class BaseContext(discord.Object, _AsyncInit):
             path = f"/interactions/{self.id}/{self.token}/callback"
             route = _Route('POST', path, channel_id=self.channel.id,
                            guild_id=self.guild or self.guild.id)
-            self.webhook = discord.Webhook.partial(
-                id=self.client.app_info.id, token=self.token, adapter=
-                discord.AsyncWebhookAdapter(self.client.http._HTTPClient__session))
         if isinstance(msg_data, list):
             # the payload json should have been finalized by now
             msg_data[0]['value'] = discord.utils.to_json(msg_data[0]['value'])
@@ -377,11 +396,6 @@ class Context(BaseContext):
 
         The options passed to the command (including this context).
         More useful in groups and checks.
-    .. attribute:: webhook
-        :type: Optional[discord.Webhook]
-
-        Webhook used for sending followup messages.
-        :const:`None` until interaction response has been sent
     """
 
     # slash commands can only be run in a channel, so it can't be None
