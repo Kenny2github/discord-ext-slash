@@ -19,7 +19,7 @@ async def hello(ctx: slash.Context):
 @client.slash_group()
 async def say(ctx: slash.Context):
     """Send a message in the bot's name."""
-    print('Options:', ctx.options)
+    logger.info('Options: %r', ctx.options)
 
 @say.check
 async def check_no_hashtags(ctx: slash.Context):
