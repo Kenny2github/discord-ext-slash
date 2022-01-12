@@ -1,7 +1,8 @@
 from __future__ import annotations
 import sys
 from typing import (
-    Any, Callable, Coroutine, Optional, Mapping, Union, Dict, Tuple)
+    Any, Callable, Coroutine, Optional, Mapping,
+    Union, Dict, Tuple, TYPE_CHECKING)
 from functools import partial, wraps
 from inspect import signature, iscoroutinefunction
 import discord
@@ -9,11 +10,13 @@ from discord.ext import commands
 from .logger import logger
 from .simples import (
     ApplicationCommandOptionType, ApplicationCommandPermissionType,
-    ChoiceEnum
-)
+    ChoiceEnum)
 from .option import Option
 from .components import Button, SelectMenu
 from .context import BaseContext, Context, ComponentContext
+if TYPE_CHECKING:
+    # avoid circular import
+    from .bot import SlashBot
 
 CheckCoro = Callable[[BaseContext], Coroutine[Any, Any, bool]]
 CallbackCoro = Callable[..., Coroutine[None, None, None]]
@@ -485,11 +488,16 @@ class ComponentCallback(BaseCallback):
         if self.max_uses is not None:
             self.max_uses -= 1
             if self.max_uses <= 0:
-                ctx.bot.comp_callbacks.discard(self)
+                self.deregister(ctx.bot)
         if self.cog is not None:
             await self.coro(self.cog, ctx, *ctx.values)
         else:
             await self.coro(ctx, *ctx.values)
+
+    def deregister(self, bot: SlashBot) -> None:
+        """Deregister this callback (and probably garbage collect it soon)."""
+        bot.comp_callbacks.discard(self)
+        bot.dispatch('component_callback_deregister', self)
 
 def cmd(**kwargs):
     """Decorator transforming a function into a :class:`Command`."""
