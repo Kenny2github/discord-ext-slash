@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import Union, Any, Mapping, Optional, Iterable, TYPE_CHECKING
+from typing import Union, Any, Mapping, Optional, Iterable, List, TYPE_CHECKING
 import discord
 from discord.ext import commands
 from .logger import logger
-from .components import ActionRow
+from .components import ActionRow, SelectOption
 from .simples import (
     _AsyncInit, _Route, ApplicationCommandOptionType, CallbackFlags,
     InteractionCallbackType, PartialMember, PartialTextChannel,
@@ -518,3 +518,26 @@ class Context(BaseContext):
 
 Interaction = Context
 
+class ComponentContext(BaseContext):
+    command: ComponentCallback # override base
+    # specific to message components
+    # TODO: message attr
+    custom_id: str
+    component_type: int
+    values: List[SelectOption] = []
+
+    async def __init__(self, client: SlashBot,
+                       cmd: ComponentCallback, event: dict):
+        await super().__init__(client, cmd, event)
+        self.custom_id = event['custom_id']
+        self.component_type = event['component_type']
+        self.values = [SelectOption.from_dict(opt)
+                       for opt in event.get('values', [])]
+
+    def _rtype_defaults(self, rtype: InteractionCallbackType,
+                              deferred: bool = False) -> InteractionCallbackType:
+        if deferred:
+            return InteractionCallbackType.DEFERRED_UPDATE_MESSAGE
+        if rtype:
+            return rtype
+        return InteractionCallbackType.UPDATE_MESSAGE
