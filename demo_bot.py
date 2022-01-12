@@ -146,50 +146,76 @@ async def numbers(
         value = num1 / num2
     await ctx.respond(value, ephemeral=True)
 
-def construct_rows(button_id: str, menu_id: str,
-                   count: int) -> List[slash.ActionRow]:
+urls = {
+    "Example.com": "https://example.com",
+    "AbyxDev": "https://abyx.dev",
+    "discord-ext-slash": "https://discord-ext-slash.rtfd.io",
+}
+
+def construct_rows(toggle_id: str, button_id: str, menu_id: str,
+                   count: int, key: str) -> List[slash.ActionRow]:
+    toggle = slash.Button(
+        slash.ButtonStyle.PRIMARY, f'Toggle link target ({count} use(s) left)',
+        emoji='\U0001f504', custom_id=toggle_id, disabled=not (count > 0))
+    button = slash.Button(
+        slash.ButtonStyle.SECONDARY, 'Get plaintext link',
+        emoji='\U0001f517', custom_id=button_id)
+    link = slash.Button(slash.ButtonStyle.LINK, key,
+                        '\u2197', url=urls[key])
     return [
-        slash.ActionRow(
-            slash.Button(slash.ButtonStyle.PRIMARY,
-                         f'A thing', custom_id=button_id),
-            slash.Button(slash.ButtonStyle.LINK, 'A link',
-                         url='https://example.com')
-        ),
+        slash.ActionRow(toggle, button, link),
         slash.ActionRow(slash.SelectMenu(menu_id, [
-            slash.SelectOption('An option', 'an option'),
-            slash.SelectOption('A described option',
-                               'another', 'It has a description.')
-        ], placeholder=f'Choose an option. {count} use(s) left.'))
+            slash.SelectOption(k, k, v) for k, v in urls.items()
+        ], placeholder='Choose a URL.'))
     ]
 
 @client.slash_cmd()
 async def components(ctx: slash.Context):
-    """Send some message components?"""
-    common_prefix = f'{ctx.id}: '
+    """Demonstrate message components."""
+    common_prefix = f'{ctx.id}: ' # unique to each command invocation
+    toggle_id = common_prefix + 'toggle'
     button_id = common_prefix + 'button'
     menu_id = common_prefix + 'menu'
+    msg = 'Here are some components!'
 
-    def check_author(context: slash.ComponentContext) -> bool:
+    async def check_author(context: slash.ComponentContext) -> bool:
         """Only listen to component interactions from the command sender."""
-        return context.author.id == ctx.author.id
+        if context.author.id != ctx.author.id:
+            await context.respond(
+                "You're not allowed to use this on someone "
+                "else's command invocation.", ephemeral=True,
+                rtype=slash.InteractionCallbackType.CHANNEL_MESSAGE_WITH_SOURCE)
+            return False
+        return True
 
-    @client.component_callback(button_id, check=check_author)
+    @client.component_callback(
+        toggle_id, check=check_author, max_uses=len(urls)-1)
+    async def toggle_callback(ctx: slash.ComponentContext):
+        """Toggle between the links"""
+        keys = list(urls.keys())
+        button: slash.Button = ctx.message.components[0].components[2]
+        # Edit the original message to update components
+        await ctx.respond(msg, components=construct_rows(
+            toggle_id, button_id, menu_id, ctx.command.max_uses,
+            keys[(keys.index(button.label) + 1) % len(keys)]))
+
+    @client.component_callback(button_id)
     async def button_callback(ctx: slash.ComponentContext):
-        """Respond to the "A thing" button being pressed."""
-        # send a new message in response to the button press
+        """Send the current link in plaintext."""
+        # Send a new message in response to the button press
         await ctx.respond(
-            'Hi! You did a thing!', ephemeral=True,
-            rtype=slash.InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE)
+            ctx.message.components[0].components[2].url, ephemeral=True,
+            rtype=slash.InteractionCallbackType.CHANNEL_MESSAGE_WITH_SOURCE)
 
-    @client.component_callback(menu_id, check=check_author, max_uses=5)
-    async def menu_callback(ctx: slash.ComponentContext, *values: str):
-        """Respond to the menu being chosen."""
-        # edit the original message to update the components
-        await ctx.respond(f'You chose: `{values}`', components=construct_rows(
-            button_id, menu_id, ctx.command.max_uses))
+    @client.component_callback(menu_id, check=check_author)
+    async def menu_callback(ctx: slash.ComponentContext, choice: str):
+        """Set the link URL based on the user's choice."""
+        await ctx.respond(msg, components=construct_rows(
+            toggle_id, button_id, menu_id, toggle_callback.max_uses, choice))
 
-    await ctx.respond('Here are some components!', components=construct_rows(
-        button_id, menu_id, 5))
+    await ctx.respond(msg, components=construct_rows(
+        toggle_id, button_id, menu_id,
+        toggle_callback.max_uses, 'Example.com'))
 
 @client.slash_cmd()
 async def code(ctx: slash.Context):
