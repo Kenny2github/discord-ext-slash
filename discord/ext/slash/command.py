@@ -2,7 +2,7 @@ from __future__ import annotations
 import sys
 from typing import Any, Callable, Coroutine, Optional, Mapping, Union, Dict, Tuple
 from functools import partial
-from inspect import signature
+from inspect import signature, iscoroutinefunction
 import discord
 from discord.ext import commands
 from .logger import logger
@@ -11,7 +11,8 @@ from .simples import (
     ChoiceEnum
 )
 from .option import Option
-from .context import BaseContext, Context
+from .components import Button, SelectMenu
+from .context import BaseContext, Context, ComponentContext
 
 CheckCoro = Callable[[BaseContext], Coroutine[Any, Any, bool]]
 CallbackCoro = Callable[..., Coroutine[None, None, None]]
@@ -404,16 +405,88 @@ class Group(Command):
         self._to_dict_common(data)
         return data
 
+class ComponentCallback(BaseCallback):
+    """A callback for a message component interaction.
+
+    The following constructor argument does not map directly to an attribute:
+
+    :param matcher:
+        Function called to decide whether to use this callback;
+        or coroutine function called for the same reason;
+        or a :class:`Button` or :class:`SelectMenu` to bind to;
+        or a string ID to bind to.
+    :type matcher: Union[Callable[[Context], bool],
+                         Callable[[Context], Coroutine[None, None, bool]],
+                         Button, SelectMenu, str]
+
+    The following attributes are set by constructor arguments:
+
+    .. attribute:: coro
+        :type: Callable[[Context], Coroutine[None, None, None]]
+
+        (Required) Original callback for the component.
+
+    The following attributes are *not* directly set by constructor arguments:
+
+    .. attribute:: matcher
+        :type: Callable[[Context], Coroutine[None, None, bool]]
+
+        Harmonized callback-use decider.
+    """
+    cog = None
+    matcher: CheckCoro
+
+    def __init__(self, coro: CallbackCoro, matcher: Union[
+        Callable[[ComponentContext], bool], CheckCoro, Button, SelectMenu, str
+    ], **kwargs):
+        super().__init__(coro, check=kwargs.pop('check', None))
+        if iscoroutinefunction(matcher):
+            self.matcher = matcher
+        elif isinstance(matcher, (Button, SelectMenu)):
+            async def match_comp(ctx: ComponentContext) -> bool:
+                return ctx.custom_id == matcher.custom_id
+            self.matcher = match_comp
+        elif isinstance(matcher, str):
+            async def match_id(ctx: ComponentContext) -> bool:
+                return ctx.custom_id == matcher
+            self.matcher = match_id
+        else:
+            async def match(ctx: ComponentContext) -> bool:
+                return matcher(ctx)
+            self.matcher = match
+
+    def __hash__(self) -> int:
+        return hash((self.coro, self.matcher))
+
+    async def invoke(self, ctx: ComponentContext) -> None:
+        if await self._check(ctx) is False:
+            raise commands.CheckFailure(
+                f'The check function for {self!r} failed.')
+        logger.debug('Interaction %s for %r by user %s in guild %s channel %s',
+                     ctx.id, ctx.custom_id, ctx.author and ctx.author.id,
+                     ctx.guild and ctx.guild.id,
+                     ctx.channel and ctx.channel.id)
+        if self.cog is not None:
+            await self.coro(self.cog, ctx, *ctx.values)
+        else:
+            await self.coro(ctx, *ctx.values)
+
 def cmd(**kwargs):
-    """Decorator that transforms a function into a :class:`Command`."""
+    """Decorator transforming a function into a :class:`Command`."""
     def decorator(func):
         return Command(func, **kwargs)
     return decorator
 
 def group(**kwargs):
-    """Decorator that transforms a function into a :class:`Group`."""
+    """Decorator transforming a function into a :class:`Group`."""
     def decorator(func):
         return Group(func, **kwargs)
+    return decorator
+
+def callback(matcher, **kwargs):
+    """Decorator transforming function into a :class:`ComponentCallback`."""
+    def decorator(func):
+        return ComponentCallback(func, matcher, **kwargs)
     return decorator
 
 CommandPermissionsDict = Dict[Optional[int], Dict[Tuple[
