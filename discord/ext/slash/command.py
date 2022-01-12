@@ -433,6 +433,12 @@ class ComponentCallback(BaseCallback):
 
         (Required) Original callback for the component.
 
+    .. attribute:: max_uses
+        :type: Optional[int]
+
+        If set, the callback can only be called this many times
+        before being deregistered.
+
     The following attributes are *not* directly set by constructor arguments:
 
     .. attribute:: matcher
@@ -440,7 +446,9 @@ class ComponentCallback(BaseCallback):
 
         Harmonized callback-use decider.
     """
+    id = 0 # to fulfil Object requirements
     cog = None
+    max_uses: Optional[int]
     matcher: CheckCoro
 
     def __init__(self, coro: CallbackCoro, matcher: Union[
@@ -461,6 +469,7 @@ class ComponentCallback(BaseCallback):
             async def match(ctx: ComponentContext) -> bool:
                 return matcher(ctx)
             self.matcher = match
+        self.max_uses = kwargs.pop('max_uses', None)
 
     def __hash__(self) -> int:
         return hash((self.coro, self.matcher))
@@ -473,6 +482,10 @@ class ComponentCallback(BaseCallback):
                      ctx.id, ctx.custom_id, ctx.author and ctx.author.id,
                      ctx.guild and ctx.guild.id,
                      ctx.channel and ctx.channel.id)
+        if self.max_uses is not None:
+            self.max_uses -= 1
+            if self.max_uses <= 0:
+                ctx.bot.comp_callbacks.discard(self)
         if self.cog is not None:
             await self.coro(self.cog, ctx, *ctx.values)
         else:
