@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import Iterable, List, Mapping, Type, Union, Optional
-from dataclasses import dataclass
 import discord
 from .simples import ButtonStyle
 
@@ -145,6 +144,9 @@ class Button(MessageComponent):
             raise TypeError('Button must have at least one of label or emoji')
         self.style = style
         self.label = label
+        if isinstance(emoji, str):
+            # assume unicode emoji
+            emoji = discord.PartialEmoji(name=emoji)
         self.emoji = emoji
         self.custom_id = custom_id
         self.url = url
@@ -241,7 +243,6 @@ class SelectMenu(MessageComponent):
             result['placeholder'] = self.placeholder
         return result
 
-@dataclass
 class SelectOption:
     """An option for a :class:`SelectMenu`.
 
@@ -277,6 +278,19 @@ class SelectOption:
         if 'emoji' in data:
             data['emoji'] = discord.PartialEmoji.from_dict(data['emoji'])
         return cls(**data)
+
+    def __init__(
+        self, label: str, value: str, description: str = None,
+        emoji: discord.PartialEmoji = None, default: bool = False
+    ) -> None:
+        self.label = label
+        self.value = value
+        self.description = description
+        if isinstance(emoji, str):
+            # assume unicode emoji
+            emoji = discord.PartialEmoji(name=emoji)
+        self.emoji = emoji
+        self.default = default
 
     def to_dict(self) -> dict:
         result = {
