@@ -63,10 +63,10 @@ from .components import (
     SelectMenu, SelectOption
 )
 from .command import (
-    Command, Group, cmd, group, permit,
-    CommandPermissionsDict
+    BaseCallback, Command, Group, cmd, group, permit,
+    callback, CommandPermissionsDict, ComponentCallback
 )
-from .context import Context, Interaction
+from .context import BaseContext, Context, Interaction, ComponentContext
 from .bot import SlashBot
 
 __all__ = [
@@ -78,8 +78,10 @@ __all__ = [
     'CallbackFlags',
     'ChoiceEnum',
     'ButtonStyle',
+    'BaseContext',
     'Context',
     'Interaction',
+    'ComponentContext',
     'Option',
     'Choice',
     'MessageComponent',
@@ -88,11 +90,14 @@ __all__ = [
     'SelectMenu',
     'SelectOption',
     'CommandPermissionsDict',
+    'BaseCallback',
     'Command',
     'Group',
+    'ComponentCallback',
     'cmd',
     'group',
     'permit',
+    'callback',
     'SlashBot'
 ]
 
