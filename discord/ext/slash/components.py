@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Iterable, List, Union, Optional
+from typing import Iterable, List, Mapping, Type, Union, Optional
 from dataclasses import dataclass
 import discord
 from .simples import ButtonStyle
@@ -252,3 +252,9 @@ class SelectOption:
         return result
 
 NonActionRow = Union[Button, SelectMenu]
+
+TYPE_CLASSES: Mapping[int, Type[MessageComponent]] = {
+    1: ActionRow,
+    2: Button,
+    3: SelectMenu,
+}
