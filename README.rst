@@ -46,7 +46,12 @@ Notes
   Notably, ``ctx.message`` does not exist, because slash commands can be run
   completely without the involvement of messages. However, channel and author
   information is still available.
+* On the other hand, ``discord.ext.slash.ComponentContext`` does have a
+  ``discord.ext.slash.ComponentContext.message`` attribute
+  available to message component callbacks.
 * All descriptions are **required**.
-* You must grant the bot ``applications.commands`` permissions in the OAuth2 section of the developer dashboard.
+* You must grant the bot ``applications.commands`` permissions in the OAuth2
+  section of the developer dashboard.
 
-See the `docs <https://discord-ext-slash.rtfd.io>`_.
+See the `docs <https://discord-ext-slash.rtfd.io>`_ as well as the
+`demo bot <https://github.com/Kenny2github/discord-ext-slash/blob/main/demo_bot.py>`_.
