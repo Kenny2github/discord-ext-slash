@@ -5,8 +5,8 @@ import discord
 from discord.ext import commands
 from .logger import logger
 from .simples import InteractionType, SlashWarning, _Route
-from .command import Command, Group, cmd, group
-from .context import Context
+from .command import BaseCallback, Command, ComponentCallback, Group
+from .context import BaseContext, ComponentContext, Context
 
 class SlashBot(commands.Bot):
     """A bot that supports slash commands.
@@ -37,6 +37,11 @@ class SlashBot(commands.Bot):
         All top-level :class:`Command` and :class:`Group` objects currently
         registered **in code**.
 
+    .. attribute:: comp_callbacks
+        :type: set[ComponentCallback]
+
+        All :class:`ComponentCallback` objects currently registered.
+
     .. decoratormethod:: slash_cmd(**kwargs)
 
         Create a :class:`Command` with the decorated coroutine and ``**kwargs``
@@ -45,9 +50,15 @@ class SlashBot(commands.Bot):
 
         Create a :class:`Group` with the decorated coroutine and ``**kwargs``
         and add it to :attr:`slash`.
+
+    .. decoratormethod:: component_callback(matcher, **kwargs)
+
+        Create a :class:`ComponentCallback` with the decorated coroutine
+        and ``**kwargs`` and add it to :attr:`comp_callbacks`.
     """
 
     slash: Set[Command]
+    comp_callbacks: Set[ComponentCallback]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -55,6 +66,7 @@ class SlashBot(commands.Bot):
         self.resolve_not_fetch = bool(kwargs.pop('resolve_not_fetch', True))
         self.fetch_if_not_get = bool(kwargs.pop('fetch_if_not_get', False))
         self.slash = set()
+        self.comp_callbacks = set()
         @self.listen()
         async def on_ready():
             self.remove_listener(on_ready)
@@ -99,7 +111,7 @@ class SlashBot(commands.Bot):
 
     def add_slash_cog(self, cog: type):
         """Add all attributes of ``cog`` that are
-        :class:`Command` or :class:`Group` instances.
+        :class:`BaseCallback` instances.
 
         :param type cog: The cog to read attributes from.
         """
@@ -109,6 +121,29 @@ class SlashBot(commands.Bot):
                 obj.cog = cog
                 if obj.parent is None:
                     self.slash.add(obj)
+            elif isinstance(obj, ComponentCallback):
+                obj.cog = cog
+                self.comp_callbacks.add(obj)
+
+    def component_callback(self, matcher, **kwargs):
+        def decorator(func):
+            callback = ComponentCallback(func, matcher, **kwargs)
+            self.comp_callbacks.add(callback)
+            return callback
+        return decorator
+
+    def add_component_callback(self, func, matcher=None, **kwargs):
+        """Non-decorator version of :meth:`component_callback`.
+
+        If ``func`` is a :class:`ComponentCallback` it will be directly added.
+        """
+        if isinstance(func, ComponentCallback):
+            self.comp_callbacks.add(func)
+        elif matcher is None:
+            raise TypeError('matcher is a required argument '
+                            'when not adding a premade callback')
+        else:
+            self.component_callback(matcher, **kwargs)(func)
 
     async def application_info(self):
         """Equivalent to :meth:`discord.Client.application_info`, but
@@ -124,9 +159,28 @@ class SlashBot(commands.Bot):
                 ', please open an issue for this: '
                 'https://github.com/Kenny2github/discord-ext-slash/issues/new')
         logger.debug('%s', event)
-        if event['type'] != InteractionType.APPLICATION_COMMAND:
-            logger.debug('Ignoring non-slash command in main handler')
+        if event['type'] == InteractionType.APPLICATION_COMMAND:
+            await self.handle_slash_command(event)
+        elif event['type'] == InteractionType.MESSAGE_COMPONENT:
+            await self.handle_component_interaction(event)
+
+    async def do_invoke(self, ctx: BaseContext, event_name: str):
+        self.dispatch(f'before_{event_name}_invoke', ctx)
+        try:
+            await ctx.command.invoke(ctx)
+        except commands.CommandError as exc:
+            self.dispatch('command_error', ctx, exc)
+        except asyncio.CancelledError:
             return
+        except Exception as exc:
+            try:
+                raise commands.CommandInvokeError(exc) from exc
+            except commands.CommandInvokeError as exc2:
+                self.dispatch('command_error', ctx, exc2)
+        else:
+            self.dispatch(f'after_{event_name}_invoke', ctx)
+
+    async def handle_slash_command(self, event: dict):
         cmd = discord.utils.get(self.slash, id=int(event['data']['id']))
         if cmd is None:
             warn(f'No command {event["data"]["name"]!r} found '
@@ -145,20 +199,18 @@ class SlashBot(commands.Bot):
             raise commands.CommandNotFound(
                 f'No command {event["data"]["name"]!r} found by any critera')
         ctx: Context = await cmd._ctx_arg[1](self, cmd, event)
-        self.dispatch('before_slash_command_invoke', ctx)
-        try:
-            await ctx.command.invoke(ctx)
-        except commands.CommandError as exc:
-            self.dispatch('command_error', ctx, exc)
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            try:
-                raise commands.CommandInvokeError(exc) from exc
-            except commands.CommandInvokeError as exc2:
-                self.dispatch('command_error', ctx, exc2)
+        await self.do_invoke(ctx, 'slash_command')
+
+    async def handle_component_interaction(self, event: dict):
+        ctx: ComponentContext = await ComponentContext(self, None, event)
+        for c in self.comp_callbacks:
+            ctx.command = c
+            if await c.matcher(ctx):
+                break
         else:
-            self.dispatch('after_slash_command_invoke', ctx)
+            raise commands.CommandNotFound(
+                f'No command found matching {ctx!r}')
+        await self.do_invoke(ctx, 'component_callback')
 
     async def on_slash_permissions(self):
         await self.register_permissions()
