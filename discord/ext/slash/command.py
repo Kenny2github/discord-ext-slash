@@ -13,20 +13,22 @@ from .simples import (
 from .option import Option
 from .context import Context
 
+CallbackCoro = Callable[..., Coroutine[None, None, None]]
+
 class Command(discord.Object):
     """Represents a slash command.
 
     The following constructor argument does not map to an attribute:
 
-    :param Coroutine check:
-        A coroutine to run before calling the command.
+    :param Callable check:
+        A coroutine function to run before calling the command.
         If it returns :const:`False` (not falsy, :const:`False`),
         then the command is not run.
 
     The following attributes are set by constructor arguments:
 
     .. attribute:: coro
-        :type: Coroutine
+        :type: Callable[..., Coroutine[None, None, None]]
 
         (Required) Original callback for the command.
     .. attribute:: id
@@ -93,7 +95,7 @@ class Command(discord.Object):
         Set this command's check to this coroutine.
     """
     cog = None
-    coro: Coroutine
+    coro: CallbackCoro
     id: Optional[int]
     name: str
     description: str
@@ -104,7 +106,7 @@ class Command(discord.Object):
     default_permission: bool = True
     permissions: CommandPermissionsDict
 
-    def __init__(self, coro: Coroutine, **kwargs):
+    def __init__(self, coro: CallbackCoro, **kwargs):
         self.id = None
         self.name = kwargs.pop('name', coro.__name__)
         self.description = kwargs.pop('description', coro.__doc__)
@@ -317,8 +319,8 @@ class Group(Command):
     Attributes and constructor arguments are the same as :class:`Command`
     unless documented below.
 
-    :param Coroutine coro:
-        (Required) Callback invoked when a subcommand of this group is called.
+    :param Callable coro:
+        (Required) Coroutine function invoked when a subcommand is called.
         (This is not a check! Register a check using :meth:`~Command.check`.)
 
     .. attribute:: slash
@@ -336,7 +338,7 @@ class Group(Command):
     cog = None
     slash: Mapping[str, Union[Group, Command]]
 
-    def __init__(self, coro: Coroutine, **kwargs):
+    def __init__(self, coro: CallbackCoro, **kwargs):
         super().__init__(coro, **kwargs)
         self.slash = {}
 
