@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Union, Any, Mapping, Optional, Iterable, List, TYPE_CHECKING
 import discord
 from discord.ext import commands
+from .message import ComponentedMessage
 from .logger import logger
 from .components import ActionRow
 from .simples import (
@@ -548,7 +549,7 @@ class ComponentContext(BaseContext):
     """
     command: ComponentCallback # override base
     # specific to message components
-    # TODO: message attr
+    message: ComponentedMessage
     custom_id: str
     component_type: int
     values: List[str] = []
@@ -556,6 +557,9 @@ class ComponentContext(BaseContext):
     async def __init__(self, client: SlashBot,
                        cmd: ComponentCallback, event: dict):
         await super().__init__(client, cmd, event)
+        self.message = ComponentedMessage(
+            state=self.client._connection,
+            channel=self.channel, data=event['message'])
         self.custom_id = event['data']['custom_id']
         self.component_type = event['data']['component_type']
         self.values = event['data'].get('values', [])
