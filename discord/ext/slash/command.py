@@ -11,9 +11,9 @@ from .simples import (
     ChoiceEnum
 )
 from .option import Option
-from .context import Context
+from .context import BaseContext, Context
 
-CheckCoro = Callable[[Context], Coroutine[Any, Any, bool]]
+CheckCoro = Callable[[BaseContext], Coroutine[Any, Any, bool]]
 CallbackCoro = Callable[..., Coroutine[None, None, None]]
 
 class Command(discord.Object):

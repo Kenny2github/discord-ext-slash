@@ -159,6 +159,11 @@ async def components(ctx: slash.Context):
         ]))
     ])
 
+@client.slash_cmd()
+async def code(ctx: slash.Context):
+    """Send this bot's own code."""
+    await ctx.respond(file=discord.File('demo_bot.py'))
+
 @client.slash_cmd(default_permission=False)
 async def stop(ctx: slash.Context):
     """Stop the bot."""
