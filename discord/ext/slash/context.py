@@ -266,6 +266,16 @@ class BaseContext(discord.Object, _AsyncInit):
             return self.sent_responses['update']
         return True # for unknown rtypes, err on the side of editing
 
+    def _set_responded(self, rtype: InteractionCallbackType) -> None:
+        if rtype == InteractionCallbackType.CHANNEL_MESSAGE_WITH_SOURCE:
+            self.sent_responses['message'] = True
+        if rtype == InteractionCallbackType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE:
+            self.sent_responses['message'] = True
+        if rtype == InteractionCallbackType.UPDATE_MESSAGE:
+            self.sent_responses['update'] = True
+        if rtype == InteractionCallbackType.DEFERRED_UPDATE_MESSAGE:
+            self.sent_responses['update'] = True
+
     async def respond(
         self, content=None, *, rtype: InteractionCallbackType = None,
         embed: discord.Embed = None, embeds: Iterable[discord.Embed] = None,
@@ -357,6 +367,7 @@ class BaseContext(discord.Object, _AsyncInit):
             await self.client.http.request(route, form=msg_data, files=files)
         else:
             await self.client.http.request(route, json=data)
+        self._set_responded(rtype)
 
     async def delete(self):
         """Delete the original interaction response message."""
