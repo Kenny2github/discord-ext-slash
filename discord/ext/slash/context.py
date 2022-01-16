@@ -320,6 +320,8 @@ class BaseContext(discord.Object, _AsyncInit):
             allowed_mentions=allowed_mentions, file=file, files=files)
         if isinstance(file, discord.File):
             files = [file]
+        if embed is not None:
+            embeds = [embed]
         if responded:
             # update the original message - an edit
             data = msg_data  # if data gets used, msg_data is not a list
