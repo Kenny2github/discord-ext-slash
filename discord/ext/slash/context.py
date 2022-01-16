@@ -193,22 +193,23 @@ class BaseContext(discord.Object, _AsyncInit):
         return f'<Interaction id={self.id}>'
 
     def _message_data(
-        self, content='', *, embed: discord.Embed = None,
+        self, content=None, *, embed: discord.Embed = None,
         embeds: Iterable[discord.Embed] = None,
         components: Iterable[ActionRow] = None,
         allowed_mentions: discord.AllowedMentions = None,
         file: discord.File = None, files: Iterable[discord.File] = None
     ) -> Union[dict, list]:
-        content = str(content)
-        if embed and embeds:
+        if content is not None:
+            content = str(content)
+        if embed is not None and embeds is not None:
             raise TypeError('Cannot specify both embed and embeds')
-        if file and files:
+        if file is not None and files is not None:
             raise TypeError('Cannot specify both file and files')
-        if embed:
+        if embed is not None:
             embeds = [embed]
-        if embeds:
+        if embeds is not None:
             embeds = [emb.to_dict() for emb, _ in zip(embeds, range(10))]
-        if components:
+        if components is not None:
             components = [c.to_dict() for c, _ in zip(components, range(5))]
         mentions = self.client.allowed_mentions
         if mentions is not None and allowed_mentions is not None:
@@ -219,16 +220,16 @@ class BaseContext(discord.Object, _AsyncInit):
             files = [file]
 
         data = {}
-        if content:
+        if content is not None:
             data['content'] = content
-        if embeds:
+        if embeds is not None:
             data['embeds'] = embeds
-        if components:
+        if components is not None:
             data['components'] = components
         if mentions is not None:
             data['allowed_mentions'] = mentions.to_dict()
 
-        if files:
+        if files is not None:
             form = []
             form.append({
                 'name': 'payload_json',
@@ -266,7 +267,7 @@ class BaseContext(discord.Object, _AsyncInit):
         return True # for unknown rtypes, err on the side of editing
 
     async def respond(
-        self, content='', *, rtype: InteractionCallbackType = None,
+        self, content=None, *, rtype: InteractionCallbackType = None,
         embed: discord.Embed = None, embeds: Iterable[discord.Embed] = None,
         components: Iterable[ActionRow] = None,
         allowed_mentions: discord.AllowedMentions = None,
@@ -331,7 +332,7 @@ class BaseContext(discord.Object, _AsyncInit):
             data = {
                 'type': int(rtype)
             }
-            if content or embeds or files:
+            if content is not None or embeds is not None or files is not None:
                 if isinstance(msg_data, list):
                     # take msg data from payload json
                     data['data'] = msg_data[0]['value']
