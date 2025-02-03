@@ -1,3 +1,8 @@
+⚠️ Archived
+============
+Please use the native features available in discord.py.
+
+----
 
 Support slash commands.
 
